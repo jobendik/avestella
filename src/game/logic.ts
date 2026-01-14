@@ -23,12 +23,12 @@ export class GameLogic {
         const arr: Star[] = [];
         let s = cx * 12.9898 + cy * 78.233 + realm.charCodeAt(0) * 0.1;
         const dm = realm === 'void' ? 0.5 : realm === 'nebula' ? 1.3 : 1;
-        
+
         // Campfire Model: Reduce star density based on distance from center
         const cellCenterX = cx * CONFIG.STAR_CELL + CONFIG.STAR_CELL / 2;
         const cellCenterY = cy * CONFIG.STAR_CELL + CONFIG.STAR_CELL / 2;
         const distFromCenter = Math.hypot(cellCenterX, cellCenterY);
-        
+
         // Star density falloff: Full density within campfire, gradual reduction beyond
         let densityMultiplier = 1;
         if (distFromCenter > CONFIG.CAMPFIRE_RADIUS) {
@@ -36,7 +36,7 @@ export class GameLogic {
             const excessDist = distFromCenter - CONFIG.CAMPFIRE_RADIUS;
             densityMultiplier = Math.max(0.1, Math.exp(-excessDist / 3000));
         }
-        
+
         const cnt = Math.floor((5 + this.seed(s) * 8) * dm * densityMultiplier);
 
         for (let i = 0; i < cnt; i++) {
@@ -46,8 +46,10 @@ export class GameLogic {
             const ly = this.seed(s) * CONFIG.STAR_CELL;
             s = s * 0.9 + 0.3;
             const br = 0.25 + this.seed(s) * 0.75;
+            const starId = `${realm}:${cx}:${cy}:${i}`;
             arr.push(
                 new Star(
+                    starId,
                     cx * CONFIG.STAR_CELL + lx,
                     cy * CONFIG.STAR_CELL + ly,
                     false,
@@ -150,7 +152,7 @@ export class GameLogic {
         viewRadius: number
     ): [Star, Star, Star][] {
         const litStars: Star[] = [];
-        
+
         for (const [k, arr] of stars) {
             if (!k.startsWith(currentRealm + ':')) continue;
             for (const s of arr) {
@@ -164,18 +166,18 @@ export class GameLogic {
         }
 
         const constellations: [Star, Star, Star][] = [];
-        
+
         for (let i = 0; i < litStars.length; i++) {
             for (let j = i + 1; j < litStars.length; j++) {
                 for (let k = j + 1; k < litStars.length; k++) {
                     const a = litStars[i];
                     const b = litStars[j];
                     const c = litStars[k];
-                    
+
                     const d1 = Math.hypot(a.x - b.x, a.y - b.y);
                     const d2 = Math.hypot(b.x - c.x, b.y - c.y);
                     const d3 = Math.hypot(c.x - a.x, c.y - a.y);
-                    
+
                     if (d1 < 450 && d2 < 450 && d3 < 450) {
                         constellations.push([a, b, c]);
                     }

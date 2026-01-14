@@ -27,6 +27,26 @@ export interface GameConfig {
     BOT_SPAWN_CHANCE: number;
     BOT_REMOVE_CHANCE: number;
     COMPASS_DISTANCE: number;
+    
+    // Animation & Physics Constants
+    UPDATE_INTERVAL: number;
+    MAX_TRAIL_LENGTH: number;
+    TRAIL_DECAY_RATE_NEAR: number;
+    TRAIL_DECAY_RATE_FAR: number;
+    PROJECTILE_TRAIL_LENGTH: number;
+    CAMERA_LERP: number;
+    SHAKE_DECAY: number;
+    SHAKE_INTENSITY: number;
+    SINGING_DECAY: number;
+    PULSING_DECAY: number;
+    EMOTE_DECAY: number;
+    TOAST_DURATION: number;
+    PLAYER_SYNC_INTERVAL: number;
+    ECHO_SYNC_INTERVAL: number;
+    POSITION_SYNC_INTERVAL: number;
+    PLAYER_TIMEOUT: number;
+    MAX_ECHOES: number;
+    MAX_PARTICLES: number;
 }
 
 export interface RealmData {
@@ -120,6 +140,7 @@ export interface Camera {
 }
 
 export interface Star {
+    id: string;
     x: number;
     y: number;
     lit: boolean;
@@ -222,7 +243,7 @@ export interface DailyProgress {
 }
 
 export interface NetworkEvent {
-    type: 'whisper' | 'sing' | 'pulse' | 'echo' | 'emote';
+    type: 'whisper' | 'sing' | 'pulse' | 'echo' | 'emote' | 'star_lit';
     x: number;
     y: number;
     uid: string;
@@ -235,4 +256,9 @@ export interface NetworkEvent {
     text?: string;
     target?: string;
     emoji?: string;
+    xp?: number;
+    singing?: number;
+    pulsing?: number;
+    emoting?: string | null;
+    starId?: string;
 }

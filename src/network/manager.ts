@@ -1,6 +1,13 @@
 // Network and multiplayer functionality for AURA
+// ⚠️ DEPRECATED: This HTTP-based NetworkManager is legacy code
+// All real-time communication should go through WebSocketClient
+// This file is kept only for potential fallback scenarios but should NOT be used
 import type { Player, OtherPlayer, NetworkEvent } from '../types';
 
+/**
+ * @deprecated Use WebSocketClient instead for all networking
+ * HTTP-based networking is NOT server-authoritative
+ */
 export class NetworkManager {
     private apiEndpoint: string = '/api';
 
@@ -48,6 +55,11 @@ export class NetworkManager {
                 dy: 0,
                 uid: player.id,
                 name: player.name,
+                hue: player.hue,
+                xp: player.xp,
+                singing: player.singing,
+                pulsing: player.pulsing,
+                emoting: player.emoting,
                 realm: realm || 'genesis',
                 t: Date.now()
             });
@@ -168,6 +180,33 @@ export class NetworkManager {
             }
         } catch (error) {
             console.error('Failed to fetch echoes:', error);
+        }
+        return [];
+    }
+
+    // Send lit star event
+    async sendLitStar(starId: string, realm: string): Promise<void> {
+        await this.sendEvent({
+            type: 'star_lit',
+            x: 0,
+            y: 0,
+            uid: 'system', // or player id
+            name: '',
+            realm: realm,
+            starId: starId,
+            t: Date.now()
+        });
+    }
+
+    // Get lit stars
+    async getLitStars(realm: string): Promise<string[]> {
+        try {
+            const response = await fetch(`${this.apiEndpoint}/stars/lit?realm=${realm}`);
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (error) {
+            console.error('Failed to fetch lit stars:', error);
         }
         return [];
     }

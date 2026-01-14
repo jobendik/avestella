@@ -1,8 +1,11 @@
 import type { GameConfig, RealmData, Achievement, Quest, RealmId } from '../types';
 
 export const CONFIG: GameConfig = {
+    // Player progression
     FORMS: ['Spark', 'Ember', 'Flame', 'Prism', 'Nova', 'Celestial', 'Eternal', 'Infinite'],
     LEVEL_XP: [0, 100, 300, 700, 1500, 3000, 6000, 12000, 25000],
+    
+    // Visual/gameplay
     TETHER: 380,
     VIEW_BASE: 520,
     VIEW_BOND: 40,
@@ -14,7 +17,7 @@ export const CONFIG: GameConfig = {
     MINIMAP_R: 2200,
     
     // Campfire Model: Centralized spawn system
-    SPAWN_RADIUS: 800,  // All players spawn within this radius of center (0,0)
+    SPAWN_RADIUS: 200,  // All players spawn within this radius of center (0,0)
     CAMPFIRE_RADIUS: 1200,  // The "warm" zone where most activity happens
     
     // Bot/Guardian System
@@ -24,6 +27,42 @@ export const CONFIG: GameConfig = {
     
     // Navigation
     COMPASS_DISTANCE: 2000,  // Show compass when this far from center
+    
+    // === Animation & Physics Constants (formerly magic numbers) ===
+    
+    // Game loop
+    UPDATE_INTERVAL: 16,  // ~60fps fixed timestep
+    
+    // Player trail
+    MAX_TRAIL_LENGTH: 45,
+    TRAIL_DECAY_RATE_NEAR: 0.022,  // Decay rate within campfire
+    TRAIL_DECAY_RATE_FAR: 0.04,    // Faster decay outside campfire
+    
+    // Projectile trail
+    PROJECTILE_TRAIL_LENGTH: 18,
+    
+    // Camera
+    CAMERA_LERP: 0.075,
+    SHAKE_DECAY: 0.03,
+    SHAKE_INTENSITY: 12,
+    
+    // Effect decay rates
+    SINGING_DECAY: 0.016,
+    PULSING_DECAY: 0.01,
+    EMOTE_DECAY: 0.016,
+    
+    // UI timing
+    TOAST_DURATION: 4300,
+    
+    // Network
+    PLAYER_SYNC_INTERVAL: 2000,
+    ECHO_SYNC_INTERVAL: 10000,
+    POSITION_SYNC_INTERVAL: 3000,
+    PLAYER_TIMEOUT: 10000,
+    
+    // Limits
+    MAX_ECHOES: 100,
+    MAX_PARTICLES: 500,
 };
 
 export const SCALES: Record<RealmId, number[]> = {

@@ -16,12 +16,12 @@ export class Renderer {
         this.mmCtx = minimapCanvas.getContext('2d')!;
         this.W = canvas.width;
         this.H = canvas.height;
-        
+
         // Disable image smoothing for crisp text rendering
         this.ctx.imageSmoothingEnabled = false;
         (this.ctx as any).webkitImageSmoothingEnabled = false;
         (this.ctx as any).mozImageSmoothingEnabled = false;
-        
+
         // Initialize minimap canvas dimensions
         // Use explicit dimensions since offsetWidth/offsetHeight might be 0 initially
         this.mmCanvas.width = 240;  // 120px CSS * 2 for retina
@@ -41,7 +41,7 @@ export class Renderer {
         const ny = player.y * 0.015;
         const n1 = r.n1;
         const n2 = r.n2;
-        
+
         // Campfire Model: Reduce nebula intensity based on distance from center
         const distFromCenter = Math.hypot(player.x, player.y);
         let nebulaIntensity = 1;
@@ -166,7 +166,7 @@ export class Renderer {
                 this.ctx.strokeText(e.text, e.x, e.y - rad - 18);
                 this.ctx.fillStyle = `rgba(255,255,255,${a * 0.95})`;
                 this.ctx.fillText(e.text, e.x, e.y - rad - 18);
-                
+
                 this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
                 this.ctx.lineWidth = 2;
                 this.ctx.font = '10px Outfit';
@@ -224,13 +224,27 @@ export class Renderer {
     }
 
     renderOthers(others: Map<string, OtherPlayer>, player: Player, viewRadius: number): void {
+        // Debug: log what we're rendering
+        if (Math.random() < 0.02) {
+            console.log(`[Renderer] renderOthers called with ${others.size} players`);
+        }
+        
         others.forEach(o => {
             const dx = o.x - player.x;
             const dy = o.y - player.y;
             const dist = Math.hypot(dx, dy);
+            
+            // Debug log
+            if (Math.random() < 0.02) {
+                console.log(`[Renderer] Drawing ${o.name} at (${o.x.toFixed(0)}, ${o.y.toFixed(0)}), dist: ${dist.toFixed(0)}, halo: ${o.halo}, r: ${o.r}, isBot: ${o.isBot}`);
+            }
+            
             if (dist > viewRadius + 120) return;
 
             const a = Math.max(0.08, 1 - dist / viewRadius);
+            
+            // Use slightly different styling for bots
+            const isBot = o.isBot || false;
 
             // Trail
             if (o.trail && o.trail.length > 1) {
@@ -301,14 +315,26 @@ export class Renderer {
                 this.ctx.fillText(o.emoting, o.x, o.y - o.halo - 16);
             }
 
-            // Name with outline
-            this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.6})`;
-            this.ctx.lineWidth = 2.5;
-            this.ctx.font = 'bold 11px Outfit';
-            this.ctx.textAlign = 'center';
-            this.ctx.strokeText(o.name, o.x, o.y - o.r - 14);
-            this.ctx.fillStyle = `rgba(255,255,255,${a * 0.9})`;
-            this.ctx.fillText(o.name, o.x, o.y - o.r - 14);
+            // Name with outline - different styling for bots
+            if (isBot) {
+                // Bot name styling - slightly transparent, different color
+                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
+                this.ctx.lineWidth = 2;
+                this.ctx.font = '10px Outfit';
+                this.ctx.textAlign = 'center';
+                this.ctx.strokeText(o.name, o.x, o.y - o.r - 12);
+                this.ctx.fillStyle = `rgba(150,180,255,${a * 0.75})`;
+                this.ctx.fillText(o.name, o.x, o.y - o.r - 12);
+            } else {
+                // Real player name styling
+                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.6})`;
+                this.ctx.lineWidth = 2.5;
+                this.ctx.font = 'bold 11px Outfit';
+                this.ctx.textAlign = 'center';
+                this.ctx.strokeText(o.name, o.x, o.y - o.r - 14);
+                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.9})`;
+                this.ctx.fillText(o.name, o.x, o.y - o.r - 14);
+            }
         });
     }
 
@@ -318,9 +344,9 @@ export class Renderer {
             const dy = bot.y - player.y;
             const dist = Math.hypot(dx, dy);
             if (dist > viewRadius + 100) return;
-            
+
             const a = Math.min(1, 1 - dist / (viewRadius + 100));
-            
+
             // Trail
             if (bot.trail.length > 1) {
                 this.ctx.globalCompositeOperation = 'lighter';
@@ -336,7 +362,7 @@ export class Renderer {
                 }
                 this.ctx.globalCompositeOperation = 'source-over';
             }
-            
+
             // Halo/glow
             this.ctx.globalCompositeOperation = 'lighter';
             this.ctx.fillStyle = `hsla(${bot.hue},75%,50%,${a * 0.12})`;
@@ -344,7 +370,7 @@ export class Renderer {
             this.ctx.arc(bot.x, bot.y, 50, 0, Math.PI * 2);
             this.ctx.fill();
             this.ctx.globalCompositeOperation = 'source-over';
-            
+
             // Core
             const botLevel = this.getPlayerLevel(bot.xp);
             const botR = 11 + botLevel * 1.5;
@@ -352,7 +378,7 @@ export class Renderer {
             this.ctx.beginPath();
             this.ctx.arc(bot.x, bot.y, botR, 0, Math.PI * 2);
             this.ctx.fill();
-            
+
             // Name (slightly transparent to indicate it's a bot)
             this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
             this.ctx.lineWidth = 2;
@@ -529,10 +555,11 @@ export class Renderer {
         this.ctx.fillRect(0, 0, this.W, this.H);
     }
 
+
+
     renderMinimap(
         player: Player,
         others: Map<string, OtherPlayer>,
-        bots: Bot[],
         echoes: Echo[],
         viewRadius: number,
         currentRealm: string
@@ -562,18 +589,6 @@ export class Renderer {
                 this.mmCtx.fill();
             }
         });
-
-        // Render bots (guardian entities - slightly different color/opacity)
-        for (const bot of bots) {
-            const dx = (bot.x - player.x) * sc;
-            const dy = (bot.y - player.y) * sc;
-            if (Math.abs(dx) < mw / 2 && Math.abs(dy) < mh / 2) {
-                this.mmCtx.fillStyle = `hsla(${bot.hue},58%,50%,0.5)`;
-                this.mmCtx.beginPath();
-                this.mmCtx.arc(cx + dx, cy + dy, 2.5, 0, Math.PI * 2);
-                this.mmCtx.fill();
-            }
-        }
 
         // Render echoes
         for (const e of echoes) {
@@ -637,20 +652,20 @@ export class Renderer {
      */
     renderCompass(player: Player): void {
         const distToCenter = Math.hypot(player.x, player.y);
-        
+
         if (distToCenter > CONFIG.COMPASS_DISTANCE) {
             const opacity = Math.min(1, (distToCenter - CONFIG.COMPASS_DISTANCE) / 1000);
             const angle = Math.atan2(-player.y, -player.x);
-            
+
             // Position on screen (offset from center)
             const radius = 100;
             const arrowX = this.W / 2 + Math.cos(angle) * radius;
             const arrowY = this.H / 2 + Math.sin(angle) * radius;
-            
+
             this.ctx.save();
             this.ctx.translate(arrowX, arrowY);
             this.ctx.rotate(angle);
-            
+
             // Arrow pointing to center
             this.ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.8})`;
             this.ctx.beginPath();
@@ -659,9 +674,9 @@ export class Renderer {
             this.ctx.lineTo(-8, -6);
             this.ctx.closePath();
             this.ctx.fill();
-            
+
             this.ctx.restore();
-            
+
             // Distance text with outline
             this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.8})`;
             this.ctx.lineWidth = 2;

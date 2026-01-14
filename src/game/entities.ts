@@ -1,6 +1,7 @@
 // Game entity classes for AURA
 
 export class Star {
+    id: string;
     x: number;
     y: number;
     lit: boolean;
@@ -10,7 +11,8 @@ export class Star {
     tws: number;
     realm: string;
 
-    constructor(x: number, y: number, lit: boolean = false, br: number = 1, realm: string = 'genesis') {
+    constructor(id: string, x: number, y: number, lit: boolean = false, br: number = 1, realm: string = 'genesis') {
+        this.id = id;
         this.x = x;
         this.y = y;
         this.lit = lit;
@@ -133,53 +135,6 @@ export class Particle {
     }
 }
 
-/**
- * Bot (Guardian) - AI-controlled entity to prevent empty world
- * Maintains minimum population and teaches new players game mechanics
- */
-export class Bot {
-    id: string;
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    hue: number;
-    name: string;
-    xp: number;
-    moveAngle: number;
-    timer: number;
-    actionTimer: number;
-    thinkTimer: number;
-    trail: { x: number; y: number; life: number }[];
-
-    constructor(x: number, y: number) {
-        this.id = 'bot-' + Math.random().toString(36).substr(2, 9);
-        this.x = x;
-        this.y = y;
-        this.vx = 0;
-        this.vy = 0;
-        // Bluish tones to subtly distinguish from players
-        this.hue = 180 + Math.random() * 60;
-        this.name = 'Guardian';
-        this.xp = 100 + Math.random() * 800;
-        this.moveAngle = Math.random() * Math.PI * 2;
-        this.timer = 0;
-        this.actionTimer = 0;
-        this.thinkTimer = 0;
-        this.trail = [];
-    }
-
-    getRandomThought(): string {
-        const thoughts = [
-            "Do you hear the music?",
-            "We drift together...",
-            "The light is strong here",
-            "I'm waiting for more",
-            "Do you see the stars?",
-            "Welcome, wanderer",
-            "The cosmos breathes",
-            "Not alone anymore"
-        ];
-        return thoughts[Math.floor(Math.random() * thoughts.length)];
-    }
-}
+// NOTE: Bot class has been REMOVED - bots are now 100% server-authoritative
+// They come through the 'world_state' WebSocket message as part of entities
+// with isBot=true flag. See server/websocket/WebSocketHandler.ts for server-side bot logic.

@@ -7,3 +7,6 @@ dist
 coverage
 .vscode
 .idea
+
+# Windows reserved device name; adding this file breaks `git add` on Windows
+nul
