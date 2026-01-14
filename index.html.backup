@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AURA — The Social Cosmos</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Outfit:wght@200;400;600&family=JetBrains+Mono:wght@400&display=swap');
+        :root{--gold:#e8c547;--gold-dim:#a68a2a;--gold-bright:#ffd700;--pink:#ff6b9d;--blue:#4ecdc4;--purple:#a855f7;--void:#050508;--glass:rgba(255,255,255,0.06);--glass-hover:rgba(255,255,255,0.12);--glass-border:rgba(255,255,255,0.12);--text-primary:rgba(255,255,255,0.95);--text-secondary:rgba(255,255,255,0.6);--text-dim:rgba(255,255,255,0.35);--danger:#ef4444;--success:#22c55e}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body,html{width:100%;height:100%;background:var(--void);overflow:hidden;font-family:'Outfit',sans-serif;cursor:none;touch-action:none;color:white}
+        canvas{display:block}
+        #cursor{position:fixed;width:28px;height:28px;pointer-events:none;z-index:9999}
+        #cursor::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:6px;height:6px;background:var(--gold);border-radius:50%;box-shadow:0 0 15px var(--gold)}
+        #cursor::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;border:1px solid rgba(232,197,71,0.35);border-radius:50%;animation:pulse 2.5s infinite}
+        @keyframes pulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:0.5}50%{transform:translate(-50%,-50%) scale(1.15);opacity:0.25}}
+        #ui{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+        
+        /* Top Bar */
+        #top{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;padding:18px 22px}
+        #logo-area{display:flex;align-items:center;gap:14px}
+        #logo{font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:300;letter-spacing:0.5em;color:var(--gold);text-shadow:0 0 30px rgba(232,197,71,0.35)}
+        #realm-pill{padding:5px 12px;background:var(--glass);border:1px solid var(--glass-border);border-radius:18px;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-secondary);display:flex;align-items:center;gap:6px;pointer-events:auto;cursor:pointer;transition:all 0.2s}
+        #realm-pill:hover{background:var(--glass-hover);border-color:var(--gold-dim)}
+        #top-right{display:flex;align-items:center;gap:10px}
+        
+        /* Voice Controls */
+        #voice-ctrl{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--glass);border:1px solid var(--glass-border);border-radius:22px;pointer-events:auto}
+        #voice-btn{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-secondary);font-size:0.95rem;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center}
+        #voice-btn:hover{background:rgba(255,255,255,0.1)}
+        #voice-btn.on{background:rgba(34,197,94,0.2);border-color:var(--success);color:var(--success)}
+        #voice-btn.muted{background:rgba(239,68,68,0.15);border-color:var(--danger);color:var(--danger)}
+        #voice-viz{display:flex;align-items:center;gap:2px;height:18px}
+        .vbar{width:3px;background:var(--blue);border-radius:2px;transition:height 0.05s}
+        #voice-status{font-size:0.65rem;color:var(--text-dim);min-width:50px}
+        
+        /* Identity */
+        #identity{display:flex;align-items:center;gap:12px;padding:8px 16px 8px 10px;background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--glass-border);border-radius:36px;pointer-events:auto;cursor:pointer;transition:all 0.25s}
+        #identity:hover{background:var(--glass-hover);border-color:var(--gold-dim);transform:translateY(-2px)}
+        #my-orb{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--pink),var(--blue));box-shadow:0 0 18px currentColor;position:relative}
+        #my-orb-ring{position:absolute;top:-3px;left:-3px;right:-3px;bottom:-3px;border-radius:50%;border:2px solid var(--gold);opacity:0;animation:ring-pulse 2s infinite}
+        @keyframes ring-pulse{0%,100%{opacity:0;transform:scale(1)}50%{opacity:0.4;transform:scale(1.05)}}
+        #my-info{text-align:left}
+        #my-name{font-size:0.88rem;font-weight:600;margin-bottom:1px}
+        #my-title{font-size:0.62rem;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase}
+        
+        /* Stats */
+        #stats{position:absolute;top:75px;right:22px;display:flex;flex-direction:column;gap:6px;min-width:170px}
+        .stat{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--glass);border:1px solid var(--glass-border);border-radius:10px}
+        .stat-icon{font-size:0.95rem;width:22px;text-align:center}
+        .stat-info{flex:1}
+        .stat-label{font-size:0.55rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em}
+        .stat-val{font-size:0.82rem;font-weight:600}
+        .stat-bar{height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;margin-top:3px}
+        .stat-fill{height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));border-radius:3px;transition:width 0.4s;box-shadow:0 0 6px var(--gold)}
+        
+        /* Realms Sidebar */
+        #realms{position:absolute;top:50%;left:14px;transform:translateY(-50%);display:flex;flex-direction:column;gap:5px;pointer-events:auto}
+        .realm{width:42px;height:42px;border-radius:11px;background:var(--glass);border:1px solid var(--glass-border);display:flex;align-items:center;justify-content:center;font-size:1.15rem;cursor:pointer;transition:all 0.2s;position:relative}
+        .realm:hover{background:var(--glass-hover);transform:translateX(4px)}
+        .realm.active{background:rgba(232,197,71,0.15);border-color:var(--gold-dim);box-shadow:0 0 18px rgba(232,197,71,0.15)}
+        .realm.locked{opacity:0.35;cursor:not-allowed}
+        .realm.locked:hover{transform:none}
+        .realm-tip{position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);padding:5px 10px;background:rgba(10,10,20,0.95);border:1px solid var(--glass-border);border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.2s;font-size:0.72rem;z-index:100}
+        .realm-tip-sub{font-size:0.6rem;color:var(--text-dim);margin-top:2px}
+        .realm:hover .realm-tip{opacity:1}
+        
+        /* Quick Actions */
+        #quick{position:absolute;top:50%;right:14px;transform:translateY(-50%);display:flex;flex-direction:column;gap:5px;pointer-events:auto}
+        .quick-btn{width:42px;height:42px;border-radius:11px;background:var(--glass);border:1px solid var(--glass-border);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;transition:all 0.2s;position:relative}
+        .quick-btn:hover{background:var(--glass-hover);transform:translateX(-4px)}
+        .quick-tip{position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%);padding:5px 10px;background:rgba(10,10,20,0.95);border:1px solid var(--glass-border);border-radius:7px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.2s;font-size:0.72rem}
+        .quick-btn:hover .quick-tip{opacity:1}
+        .quick-btn.has-notif::after{content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;background:var(--danger);border-radius:50%;border:2px solid var(--void)}
+        
+        /* Action Bar */
+        #actions{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:5px;padding:9px 14px;background:rgba(10,10,20,0.75);backdrop-filter:blur(20px);border:1px solid var(--glass-border);border-radius:26px;pointer-events:auto}
+        .action{position:relative;width:48px;height:48px;border-radius:50%;background:var(--glass);border:1px solid var(--glass-border);display:flex;align-items:center;justify-content:center;font-size:1.2rem;cursor:pointer;transition:all 0.2s}
+        .action:hover{transform:translateY(-4px);background:var(--glass-hover);border-color:rgba(255,255,255,0.2);box-shadow:0 8px 22px rgba(0,0,0,0.3)}
+        .action.primary{width:58px;height:58px;font-size:1.4rem;background:linear-gradient(135deg,rgba(232,197,71,0.2),rgba(232,197,71,0.08));border-color:var(--gold-dim)}
+        .action.primary:hover{background:linear-gradient(135deg,rgba(232,197,71,0.3),rgba(232,197,71,0.12));box-shadow:0 8px 28px rgba(232,197,71,0.2)}
+        .action-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);padding:4px 9px;background:rgba(5,5,10,0.95);border:1px solid var(--glass-border);border-radius:6px;font-size:0.65rem;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.15s}
+        .action:hover .action-tip{opacity:1}
+        .action-key{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-family:'JetBrains Mono',monospace;font-size:0.55rem;color:var(--text-dim)}
+        .divider{width:1px;height:26px;background:var(--glass-border);margin:0 6px}
+        .action.cooldown{opacity:0.5;pointer-events:none}
+        
+        /* Message Box */
+        #msg-box{position:absolute;bottom:105px;left:50%;transform:translateX(-50%);width:min(460px,85vw);opacity:0;pointer-events:none;transition:all 0.25s}
+        #msg-box.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(-8px)}
+        #msg-target{text-align:center;font-size:0.72rem;color:var(--blue);margin-bottom:6px;opacity:0;transition:opacity 0.2s}
+        #msg-target.show{opacity:1}
+        #msg-input{width:100%;padding:13px 20px;background:rgba(8,8,16,0.9);backdrop-filter:blur(20px);border:1px solid var(--glass-border);border-radius:26px;color:white;font-size:0.88rem;font-family:'Outfit',sans-serif;outline:none;text-align:center}
+        #msg-input::placeholder{color:var(--text-dim);font-style:italic}
+        #msg-input:focus{border-color:var(--gold-dim);box-shadow:0 0 32px rgba(232,197,71,0.12)}
+        #msg-hint{text-align:center;margin-top:7px;font-size:0.62rem;color:var(--text-dim);letter-spacing:0.08em}
+        
+        /* Hint */
+        #hint{position:absolute;bottom:165px;left:50%;transform:translateX(-50%);color:var(--text-dim);font-size:0.68rem;letter-spacing:0.1em;text-transform:uppercase;animation:hint-pulse 4s infinite}
+        @keyframes hint-pulse{0%,100%{opacity:0.25}50%{opacity:0.5}}
+        
+        /* Minimap */
+        #minimap{position:absolute;bottom:105px;right:22px;width:120px;height:120px;background:rgba(8,8,16,0.8);backdrop-filter:blur(10px);border:1px solid var(--glass-border);border-radius:12px;overflow:hidden;pointer-events:auto}
+        #mm-canvas{width:100%;height:100%}
+        #mm-label{position:absolute;bottom:5px;left:50%;transform:translateX(-50%);font-size:0.52rem;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase}
+        
+        /* Panels */
+        .panel{position:absolute;background:rgba(10,10,20,0.94);backdrop-filter:blur(22px);border:1px solid var(--glass-border);border-radius:18px;pointer-events:auto;opacity:0;transition:all 0.3s;display:none;overflow:hidden}
+        .panel.show{opacity:1;display:block}
+        .panel-head{display:flex;align-items:center;justify-content:space-between;padding:15px 17px;border-bottom:1px solid var(--glass-border)}
+        .panel-title{font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:400}
+        .panel-close{width:24px;height:24px;border-radius:7px;background:rgba(255,255,255,0.05);border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;transition:all 0.15s}
+        .panel-close:hover{background:rgba(255,255,255,0.1);color:white}
+        .panel-tabs{display:flex;border-bottom:1px solid var(--glass-border)}
+        .panel-tab{flex:1;padding:10px;background:none;border:none;color:var(--text-dim);font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;transition:all 0.2s;position:relative}
+        .panel-tab:hover{color:var(--text-secondary)}
+        .panel-tab.active{color:var(--gold)}
+        .panel-tab.active::after{content:'';position:absolute;bottom:-1px;left:20%;right:20%;height:2px;background:var(--gold);border-radius:2px}
+        .panel-body{padding:14px;max-height:340px;overflow-y:auto}
+        
+        /* Social Panel */
+        #social{top:75px;left:65px;width:270px;max-height:calc(100vh - 180px);transform:translateX(-20px)}
+        #social.show{transform:translateX(0)}
+        .player-item{display:flex;align-items:center;gap:9px;padding:9px;background:rgba(255,255,255,0.03);border-radius:11px;cursor:pointer;transition:all 0.2s;margin-bottom:5px}
+        .player-item:hover{background:rgba(255,255,255,0.06)}
+        .player-item.speaking{background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2)}
+        .player-orb{width:30px;height:30px;border-radius:50%;flex-shrink:0;position:relative}
+        .player-speaking-ring{position:absolute;top:-2px;left:-2px;right:-2px;bottom:-2px;border-radius:50%;border:2px solid var(--success);opacity:0;animation:speak-ring 1s infinite}
+        @keyframes speak-ring{0%,100%{opacity:0.3;transform:scale(1)}50%{opacity:0.6;transform:scale(1.1)}}
+        .player-item.speaking .player-speaking-ring{opacity:1}
+        .player-info{flex:1;min-width:0}
+        .player-name{font-size:0.82rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .player-status{font-size:0.65rem;color:var(--text-dim)}
+        .player-bond{width:38px;height:4px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden}
+        .player-bond-fill{height:100%;background:linear-gradient(90deg,var(--pink),var(--blue));transition:width 0.3s}
+        .empty-state{text-align:center;padding:28px 14px;color:var(--text-dim)}
+        .empty-icon{font-size:2rem;margin-bottom:10px;opacity:0.5}
+        .empty-text{font-size:0.82rem}
+        
+        /* Achievements Panel */
+        #achievements{top:50%;left:50%;transform:translate(-50%,-50%) scale(0.95);width:min(560px,92vw);max-height:80vh}
+        #achievements.show{transform:translate(-50%,-50%) scale(1)}
+        .ach-header{padding:20px;border-bottom:1px solid var(--glass-border);display:flex;justify-content:space-between;align-items:center}
+        .ach-title{font-family:'Cormorant Garamond',serif;font-size:1.35rem}
+        .ach-progress{font-size:0.78rem;color:var(--text-secondary)}
+        .ach-progress span{color:var(--gold);font-weight:600}
+        .ach-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;padding:18px;max-height:55vh;overflow-y:auto}
+        .ach-card{padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:12px;display:flex;gap:12px;transition:all 0.2s}
+        .ach-card.unlocked{background:rgba(232,197,71,0.08);border-color:var(--gold-dim)}
+        .ach-card.locked{opacity:0.45}
+        .ach-icon{font-size:1.8rem;width:46px;height:46px;display:flex;align-items:center;justify-content:center;background:var(--glass);border-radius:10px;flex-shrink:0}
+        .ach-card.unlocked .ach-icon{background:rgba(232,197,71,0.15)}
+        .ach-info{flex:1}
+        .ach-name{font-size:0.85rem;font-weight:600;margin-bottom:3px}
+        .ach-desc{font-size:0.72rem;color:var(--text-dim);line-height:1.4}
+        .ach-reward{font-size:0.68rem;color:var(--gold);margin-top:5px}
+        .ach-bar{height:4px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;margin-top:6px}
+        .ach-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));transition:width 0.3s}
+        
+        /* Settings Panel */
+        #settings{top:50%;left:50%;transform:translate(-50%,-50%) scale(0.95);width:min(420px,90vw)}
+        #settings.show{transform:translate(-50%,-50%) scale(1)}
+        .settings-section{padding:16px;border-bottom:1px solid var(--glass-border)}
+        .settings-section:last-child{border-bottom:none}
+        .settings-title{font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px}
+        .setting-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0}
+        .setting-label{font-size:0.85rem}
+        .setting-desc{font-size:0.7rem;color:var(--text-dim);margin-top:2px}
+        .toggle{width:44px;height:24px;background:rgba(255,255,255,0.1);border-radius:12px;cursor:pointer;position:relative;transition:all 0.2s}
+        .toggle.on{background:var(--gold)}
+        .toggle-knob{position:absolute;top:2px;left:2px;width:20px;height:20px;background:white;border-radius:50%;transition:all 0.2s;box-shadow:0 2px 6px rgba(0,0,0,0.3)}
+        .toggle.on .toggle-knob{left:22px}
+        .slider-row{display:flex;align-items:center;gap:12px}
+        .slider{flex:1;height:4px;background:rgba(255,255,255,0.1);border-radius:4px;cursor:pointer;position:relative}
+        .slider-fill{height:100%;background:var(--gold);border-radius:4px;transition:width 0.1s}
+        .slider-val{font-size:0.75rem;min-width:35px;text-align:right;color:var(--text-secondary)}
+        .color-picker{display:flex;gap:8px;flex-wrap:wrap}
+        .color-opt{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all 0.2s}
+        .color-opt:hover{transform:scale(1.1)}
+        .color-opt.selected{border-color:white;box-shadow:0 0 12px currentColor}
+        
+        /* Quests Panel */
+        #quests{top:75px;right:65px;width:280px;max-height:calc(100vh - 180px);transform:translateX(20px)}
+        #quests.show{transform:translateX(0)}
+        .quest-item{padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:11px;margin-bottom:8px;transition:all 0.2s}
+        .quest-item.complete{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.3)}
+        .quest-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+        .quest-name{font-size:0.85rem;font-weight:500}
+        .quest-reward{font-size:0.7rem;color:var(--gold);display:flex;align-items:center;gap:4px}
+        .quest-desc{font-size:0.72rem;color:var(--text-dim);margin-bottom:8px}
+        .quest-progress{display:flex;align-items:center;gap:8px}
+        .quest-bar{flex:1;height:5px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden}
+        .quest-bar-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--purple));transition:width 0.3s}
+        .quest-item.complete .quest-bar-fill{background:var(--success)}
+        .quest-count{font-size:0.7rem;color:var(--text-secondary);min-width:45px;text-align:right}
+        
+        /* Profile Card */
+        #profile{position:absolute;width:290px;background:rgba(10,10,20,0.95);backdrop-filter:blur(22px);border:1px solid var(--glass-border);border-radius:18px;box-shadow:0 16px 45px rgba(0,0,0,0.5);pointer-events:auto;opacity:0;transform:scale(0.95);transition:all 0.2s;display:none;z-index:100;overflow:hidden}
+        #profile.show{opacity:1;transform:scale(1);display:block}
+        .prof-banner{height:70px;position:relative;overflow:hidden}
+        .prof-banner-bg{position:absolute;top:0;left:0;right:0;bottom:0;opacity:0.4}
+        .prof-avatar-wrap{position:absolute;bottom:-28px;left:18px}
+        .prof-avatar{width:64px;height:64px;border-radius:50%;border:4px solid rgba(10,10,20,0.95);position:relative}
+        .prof-avatar-inner{width:100%;height:100%;border-radius:50%}
+        .prof-content{padding:38px 18px 18px}
+        .prof-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+        .prof-name{font-size:1.1rem;font-weight:600}
+        .prof-title{font-size:0.68rem;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;margin-top:2px}
+        .prof-voice{padding:3px 8px;background:var(--glass);border-radius:10px;font-size:0.65rem;color:var(--text-dim);display:flex;align-items:center;gap:4px}
+        .prof-voice.speaking{background:rgba(34,197,94,0.15);color:var(--success)}
+        .prof-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+        .prof-stat{text-align:center;padding:10px 6px;background:rgba(255,255,255,0.03);border-radius:10px}
+        .prof-stat-val{font-size:1rem;font-weight:600;color:var(--gold)}
+        .prof-stat-label{font-size:0.58rem;color:var(--text-dim);text-transform:uppercase;margin-top:2px}
+        .prof-bond{margin-bottom:16px}
+        .prof-bond-head{display:flex;justify-content:space-between;margin-bottom:5px;font-size:0.7rem;color:var(--text-dim)}
+        .prof-bond-bar{height:5px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden}
+        .prof-bond-fill{height:100%;background:linear-gradient(90deg,var(--pink),var(--blue));border-radius:5px;transition:width 0.4s}
+        .prof-actions{display:flex;gap:8px}
+        .prof-btn{flex:1;padding:10px;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass);color:white;font-size:0.75rem;font-family:'Outfit',sans-serif;font-weight:500;cursor:pointer;transition:all 0.2s}
+        .prof-btn:hover{background:var(--glass-hover)}
+        .prof-btn.primary{background:linear-gradient(135deg,var(--gold-dim),var(--gold));border:none;color:#000}
+        .prof-btn.primary:hover{filter:brightness(1.1)}
+        
+        /* Emote Wheel */
+        #emotes{position:absolute;width:190px;height:190px;border-radius:50%;background:radial-gradient(circle,rgba(15,15,25,0.98) 0%,rgba(10,10,20,0.95) 100%);backdrop-filter:blur(20px);border:1px solid var(--glass-border);display:none;pointer-events:auto;z-index:150}
+        #emotes.show{display:block;animation:emote-in 0.2s ease}
+        @keyframes emote-in{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}
+        .emote{position:absolute;width:40px;height:40px;border-radius:50%;background:var(--glass);border:1px solid var(--glass-border);display:flex;align-items:center;justify-content:center;font-size:1.3rem;cursor:pointer;transition:all 0.15s}
+        .emote:hover{transform:scale(1.2);background:rgba(255,255,255,0.15)}
+        
+        /* Toasts */
+        #toasts{position:absolute;top:85px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:7px;z-index:200;pointer-events:none}
+        .toast{padding:11px 18px;background:rgba(15,15,25,0.95);backdrop-filter:blur(16px);border:1px solid var(--glass-border);border-radius:11px;font-size:0.8rem;display:flex;align-items:center;gap:9px;animation:toast-in 0.3s ease,toast-out 0.3s ease 3.8s forwards;pointer-events:auto}
+        @keyframes toast-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes toast-out{from{opacity:1}to{opacity:0;transform:translateY(-12px)}}
+        .toast.achievement{border-color:var(--gold-dim);background:linear-gradient(135deg,rgba(232,197,71,0.1),rgba(15,15,25,0.95))}
+        .toast.quest{border-color:var(--success);background:linear-gradient(135deg,rgba(34,197,94,0.1),rgba(15,15,25,0.95))}
+        
+        /* Loading */
+        #loading{position:absolute;top:0;left:0;width:100%;height:100%;background:var(--void);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center}
+        #loading.hide{opacity:0;pointer-events:none;transition:opacity 1.2s}
+        #loading h1{font-family:'Cormorant Garamond',serif;font-weight:300;letter-spacing:0.7em;color:var(--gold);font-size:3.8rem;margin-bottom:6px;text-shadow:0 0 50px rgba(232,197,71,0.35);animation:glow 3s infinite}
+        @keyframes glow{0%,100%{text-shadow:0 0 30px rgba(232,197,71,0.25)}50%{text-shadow:0 0 60px rgba(232,197,71,0.5)}}
+        #loading-sub{font-size:0.8rem;letter-spacing:0.35em;color:var(--text-dim);text-transform:uppercase;margin-bottom:45px}
+        #loading-features{display:flex;justify-content:center;gap:35px;margin-bottom:35px}
+        .feat{text-align:center}
+        .feat-icon{font-size:1.9rem;margin-bottom:9px;animation:float 3s infinite}
+        .feat:nth-child(2) .feat-icon{animation-delay:0.3s}
+        .feat:nth-child(3) .feat-icon{animation-delay:0.6s}
+        @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+        .feat-text{font-size:0.68rem;color:var(--text-secondary);letter-spacing:0.1em;text-transform:uppercase}
+        #loading p{color:var(--text-secondary);font-size:0.88rem;line-height:1.8;text-align:center;max-width:450px;padding:0 22px;margin-bottom:35px}
+        #name-input{width:260px;padding:13px 22px;background:var(--glass);backdrop-filter:blur(10px);border:1px solid var(--glass-border);border-radius:26px;color:white;font-size:0.92rem;font-family:'Outfit',sans-serif;text-align:center;outline:none;margin-bottom:20px}
+        #name-input::placeholder{color:var(--text-dim)}
+        #name-input:focus{border-color:var(--gold-dim)}
+        #start{padding:15px 55px;background:transparent;border:2px solid var(--gold);color:var(--gold);font-family:'Outfit',sans-serif;font-size:0.82rem;letter-spacing:0.3em;text-transform:uppercase;cursor:pointer;transition:all 0.35s;font-weight:600}
+        #start:hover{background:var(--gold);color:var(--void);box-shadow:0 0 40px rgba(232,197,71,0.4);transform:translateY(-2px)}
+        
+        /* Onboarding */
+        #onboard{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(5,5,10,0.88);z-index:500;display:none;align-items:center;justify-content:center}
+        #onboard.show{display:flex}
+        .ob-card{max-width:450px;padding:36px;background:rgba(12,12,22,0.98);backdrop-filter:blur(20px);border:1px solid var(--glass-border);border-radius:22px;text-align:center}
+        .ob-icon{font-size:3.8rem;margin-bottom:18px;animation:ob-float 2.5s infinite}
+        @keyframes ob-float{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-8px) rotate(3deg)}}
+        .ob-title{font-family:'Cormorant Garamond',serif;font-size:1.7rem;margin-bottom:14px}
+        .ob-text{color:var(--text-secondary);line-height:1.7;margin-bottom:24px;font-size:0.88rem}
+        .ob-keys{display:flex;justify-content:center;gap:9px;margin-bottom:24px;flex-wrap:wrap}
+        .ob-key{padding:7px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:7px;font-size:0.75rem;display:flex;align-items:center;gap:5px}
+        .ob-key span{font-size:0.95rem}
+        .ob-btn{padding:13px 36px;background:var(--gold);border:none;border-radius:11px;color:var(--void);font-family:'Outfit',sans-serif;font-size:0.82rem;font-weight:600;cursor:pointer;transition:all 0.3s}
+        .ob-btn:hover{filter:brightness(1.1);transform:translateY(-2px);box-shadow:0 8px 22px rgba(232,197,71,0.3)}
+        
+        /* Realm Transition */
+        #realm-trans{position:absolute;top:0;left:0;width:100%;height:100%;background:var(--void);z-index:400;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.5s}
+        #realm-trans.active{opacity:1;pointer-events:auto}
+        .trans-icon{font-size:3.2rem;margin-bottom:14px;animation:trans-pulse 1.5s infinite}
+        @keyframes trans-pulse{0%,100%{transform:scale(1);opacity:0.8}50%{transform:scale(1.1);opacity:1}}
+        .trans-name{font-family:'Cormorant Garamond',serif;font-size:1.9rem;font-weight:300;letter-spacing:0.2em;color:var(--gold)}
+        
+        /* Mobile */
+        @media(max-width:768px){
+            #top{padding:12px 14px}
+            #logo{font-size:1.15rem}
+            #realm-pill{display:none}
+            #voice-ctrl{padding:4px 8px}
+            #voice-status{display:none}
+            #identity{padding:6px 10px 6px 6px;gap:8px}
+            #my-orb{width:28px;height:28px}
+            #stats{display:none}
+            #realms{left:8px}
+            .realm{width:36px;height:36px;font-size:1rem}
+            #quick{right:8px}
+            .quick-btn{width:36px;height:36px;font-size:0.95rem}
+            #minimap{width:85px;height:85px;bottom:95px;right:10px}
+            .action{width:42px;height:42px;font-size:1.05rem}
+            .action.primary{width:50px;height:50px;font-size:1.25rem}
+            .action-key{display:none}
+            #social,#quests{width:calc(100% - 20px);left:10px;right:10px;top:60px}
+            #profile{width:calc(100% - 20px);max-width:290px}
+            #achievements,#settings{width:calc(100% - 20px)}
+            .ach-grid{grid-template-columns:1fr}
+        }
+        ::-webkit-scrollbar{width:4px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:4px}
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <h1>AURA</h1>
+        <div id="loading-sub">The Social Cosmos</div>
+        <div id="loading-features">
+            <div class="feat"><div class="feat-icon">🌌</div><div class="feat-text">Infinite Space</div></div>
+            <div class="feat"><div class="feat-icon">🎙️</div><div class="feat-text">Spatial Voice</div></div>
+            <div class="feat"><div class="feat-icon">✨</div><div class="feat-text">Evolve & Create</div></div>
+        </div>
+        <p>Drift through an infinite cosmos of connection.<br>Speak across the void. Form constellations with kindred souls.<br>Leave echoes that ripple through eternity.</p>
+        <input type="text" id="name-input" placeholder="Choose your name..." maxlength="20" autocomplete="off">
+        <button id="start">Enter the Cosmos</button>
+    </div>
+    
+    <div id="onboard">
+        <div class="ob-card">
+            <div class="ob-icon">🌟</div>
+            <div class="ob-title">Welcome to the Cosmos</div>
+            <p class="ob-text">You are now a spark in an infinite universe.<br>Move to drift through space. Connect with others to grow stronger.</p>
+            <div class="ob-keys">
+                <div class="ob-key"><span>💬</span> Whisper</div>
+                <div class="ob-key"><span>🎵</span> Sing</div>
+                <div class="ob-key"><span>✨</span> Pulse</div>
+                <div class="ob-key"><span>⭐</span> Echo</div>
+            </div>
+            <button class="ob-btn" id="ob-go">Begin Journey</button>
+        </div>
+    </div>
+    
+    <div id="realm-trans">
+        <div style="text-align:center">
+            <div class="trans-icon" id="trans-icon">🌌</div>
+            <div class="trans-name" id="trans-name">Genesis</div>
+        </div>
+    </div>
+    
+    <div id="cursor"></div>
+    <canvas id="cosmos"></canvas>
+    
+    <div id="ui">
+        <div id="top">
+            <div id="logo-area">
+                <div id="logo">AURA</div>
+                <div id="realm-pill"><span id="realm-icon">🌌</span><span id="realm-text">Genesis</span></div>
+            </div>
+            <div id="top-right">
+                <div id="voice-ctrl">
+                    <button id="voice-btn" title="Toggle Voice">🎙️</button>
+                    <div id="voice-viz">
+                        <div class="vbar" style="height:4px"></div>
+                        <div class="vbar" style="height:6px"></div>
+                        <div class="vbar" style="height:10px"></div>
+                        <div class="vbar" style="height:6px"></div>
+                        <div class="vbar" style="height:4px"></div>
+                    </div>
+                    <span id="voice-status">Off</span>
+                </div>
+                <div id="identity">
+                    <div id="my-orb"><div id="my-orb-ring"></div></div>
+                    <div id="my-info">
+                        <div id="my-name">Wanderer</div>
+                        <div id="my-title">Spark • Lv 1</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="stats">
+            <div class="stat">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-info">
+                    <div class="stat-label">Experience</div>
+                    <div class="stat-val" id="xp-val">0 / 100</div>
+                    <div class="stat-bar"><div class="stat-fill" id="xp-fill" style="width:0%"></div></div>
+                </div>
+            </div>
+            <div class="stat">
+                <div class="stat-icon">💫</div>
+                <div class="stat-info">
+                    <div class="stat-label">Connections</div>
+                    <div class="stat-val" id="conn-val">0</div>
+                </div>
+            </div>
+            <div class="stat">
+                <div class="stat-icon">⭐</div>
+                <div class="stat-info">
+                    <div class="stat-label">Stars Lit</div>
+                    <div class="stat-val" id="star-val">0</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="realms">
+            <div class="realm active" data-realm="genesis">🌌<div class="realm-tip">Genesis<div class="realm-tip-sub">The birthplace</div></div></div>
+            <div class="realm" data-realm="nebula">🌸<div class="realm-tip">Nebula Gardens<div class="realm-tip-sub">Where echoes bloom</div></div></div>
+            <div class="realm" data-realm="void">🌑<div class="realm-tip">The Void<div class="realm-tip-sub">Embrace darkness</div></div></div>
+            <div class="realm locked" data-realm="starforge">🔥<div class="realm-tip">Starforge<div class="realm-tip-sub">Unlock at Lv 5</div></div></div>
+            <div class="realm locked" data-realm="sanctuary">🏛️<div class="realm-tip">Sanctuary<div class="realm-tip-sub">Unlock at Lv 10</div></div></div>
+        </div>
+        
+        <div id="quick">
+            <div class="quick-btn" id="btn-quests"><div class="quick-tip">Quests</div>📋</div>
+            <div class="quick-btn" id="btn-achievements"><div class="quick-tip">Achievements</div>🏆</div>
+            <div class="quick-btn" id="btn-settings"><div class="quick-tip">Settings</div>⚙️</div>
+        </div>
+        
+        <div id="hint">Move to drift • Click souls to connect • V for voice</div>
+        
+        <div id="msg-box">
+            <div id="msg-target"></div>
+            <input type="text" id="msg-input" placeholder="Whisper into the void..." maxlength="100" autocomplete="off">
+            <div id="msg-hint">Enter to send • Escape to cancel</div>
+        </div>
+        
+        <div id="actions">
+            <button class="action" id="btn-social">👥<div class="action-tip">Nearby</div><span class="action-key">Tab</span></button>
+            <div class="divider"></div>
+            <button class="action" id="btn-whisper">💬<div class="action-tip">Whisper</div><span class="action-key">W</span></button>
+            <button class="action primary" id="btn-sing">🎵<div class="action-tip">Sing</div><span class="action-key">S</span></button>
+            <button class="action" id="btn-pulse">✨<div class="action-tip">Pulse</div><span class="action-key">P</span></button>
+            <button class="action" id="btn-echo">⭐<div class="action-tip">Echo</div><span class="action-key">E</span></button>
+            <div class="divider"></div>
+            <button class="action" id="btn-emote">😊<div class="action-tip">Emote</div><span class="action-key">Q</span></button>
+        </div>
+        
+        <div id="minimap">
+            <canvas id="mm-canvas"></canvas>
+            <div id="mm-label">Local Space</div>
+        </div>
+        
+        <!-- Social Panel -->
+        <div class="panel" id="social">
+            <div class="panel-head">
+                <div class="panel-title">Cosmos</div>
+                <button class="panel-close" data-close="social">×</button>
+            </div>
+            <div class="panel-tabs">
+                <button class="panel-tab active" data-tab="nearby">Nearby</button>
+                <button class="panel-tab" data-tab="friends">Friends</button>
+                <button class="panel-tab" data-tab="recent">Recent</button>
+            </div>
+            <div class="panel-body" id="nearby-list"></div>
+        </div>
+        
+        <!-- Achievements Panel -->
+        <div class="panel" id="achievements">
+            <div class="ach-header">
+                <div class="ach-title">Achievements</div>
+                <div class="ach-progress"><span id="ach-count">0</span> / <span id="ach-total">12</span></div>
+                <button class="panel-close" data-close="achievements">×</button>
+            </div>
+            <div class="ach-grid" id="ach-grid"></div>
+        </div>
+        
+        <!-- Settings Panel -->
+        <div class="panel" id="settings">
+            <div class="panel-head">
+                <div class="panel-title">Settings</div>
+                <button class="panel-close" data-close="settings">×</button>
+            </div>
+            <div class="settings-section">
+                <div class="settings-title">Audio</div>
+                <div class="setting-row">
+                    <div><div class="setting-label">Music</div><div class="setting-desc">Ambient drone & sounds</div></div>
+                    <div class="toggle on" data-setting="music"><div class="toggle-knob"></div></div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-label">Volume</div>
+                    <div class="slider-row">
+                        <div class="slider" data-setting="volume"><div class="slider-fill" style="width:70%"></div></div>
+                        <div class="slider-val">70%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="settings-title">Appearance</div>
+                <div class="setting-row">
+                    <div><div class="setting-label">Aura Color</div></div>
+                </div>
+                <div class="color-picker" id="color-picker"></div>
+            </div>
+            <div class="settings-section">
+                <div class="settings-title">Effects</div>
+                <div class="setting-row">
+                    <div><div class="setting-label">Particles</div><div class="setting-desc">Visual particle effects</div></div>
+                    <div class="toggle on" data-setting="particles"><div class="toggle-knob"></div></div>
+                </div>
+                <div class="setting-row">
+                    <div><div class="setting-label">Screen Shake</div><div class="setting-desc">Camera shake effects</div></div>
+                    <div class="toggle on" data-setting="shake"><div class="toggle-knob"></div></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quests Panel -->
+        <div class="panel" id="quests">
+            <div class="panel-head">
+                <div class="panel-title">Daily Quests</div>
+                <button class="panel-close" data-close="quests">×</button>
+            </div>
+            <div class="panel-body" id="quest-list"></div>
+        </div>
+        
+        <!-- Profile Card -->
+        <div id="profile">
+            <div class="prof-banner"><div class="prof-banner-bg" id="prof-banner"></div>
+                <div class="prof-avatar-wrap"><div class="prof-avatar"><div class="prof-avatar-inner" id="prof-avatar"></div></div></div>
+            </div>
+            <div class="prof-content">
+                <div class="prof-header">
+                    <div><div class="prof-name" id="prof-name">Unknown</div><div class="prof-title" id="prof-title">Spark • Lv 1</div></div>
+                    <div class="prof-voice" id="prof-voice"><span>🔇</span> Silent</div>
+                </div>
+                <div class="prof-stats">
+                    <div class="prof-stat"><div class="prof-stat-val" id="prof-stars">0</div><div class="prof-stat-label">Stars</div></div>
+                    <div class="prof-stat"><div class="prof-stat-val" id="prof-echoes">0</div><div class="prof-stat-label">Echoes</div></div>
+                    <div class="prof-stat"><div class="prof-stat-val" id="prof-age">0h</div><div class="prof-stat-label">Age</div></div>
+                </div>
+                <div class="prof-bond">
+                    <div class="prof-bond-head"><span>Connection</span><span id="prof-bond-val">0%</span></div>
+                    <div class="prof-bond-bar"><div class="prof-bond-fill" id="prof-bond-fill"></div></div>
+                </div>
+                <div class="prof-actions">
+                    <button class="prof-btn" id="prof-whisper">💬 Whisper</button>
+                    <button class="prof-btn primary" id="prof-follow">Follow</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Emote Wheel -->
+        <div id="emotes"></div>
+        
+        <!-- Toasts -->
+        <div id="toasts"></div>
+    </div>
+
+<script>
+// ===== CONFIG =====
+const firebaseConfig=typeof __firebase_config!=='undefined'?JSON.parse(__firebase_config):null;
+const appId=typeof __app_id!=='undefined'?__app_id:'aura-ultimate-v1';
+const initToken=typeof __initial_auth_token!=='undefined'?__initial_auth_token:null;
+
+const CONFIG={
+    FORMS:['Spark','Ember','Flame','Prism','Nova','Celestial','Eternal','Infinite'],
+    LEVEL_XP:[0,100,300,700,1500,3000,6000,12000,25000],
+    TETHER:380,VIEW_BASE:520,VIEW_BOND:40,
+    BOND_DECAY:0.06,BOND_GAIN:11,
+    STAR_CELL:180,WHISPER_SPEED:5.5,DRIFT:0.032,MINIMAP_R:2200
+};
+
+const SCALES={
+    genesis:[261.63,293.66,329.63,392,440,523.25],
+    nebula:[277.18,311.13,369.99,415.3,466.16,554.37],
+    void:[130.81,146.83,164.81,196,220,261.63],
+    starforge:[293.66,329.63,369.99,440,493.88,587.33],
+    sanctuary:[246.94,293.66,329.63,392,440,493.88]
+};
+
+const REALMS={
+    genesis:{name:'Genesis',icon:'🌌',bg:[5,5,12],n1:[78,205,196],n2:[255,107,157],unlock:1},
+    nebula:{name:'Nebula Gardens',icon:'🌸',bg:[15,5,20],n1:[255,107,157],n2:[168,85,247],unlock:1},
+    void:{name:'The Void',icon:'🌑',bg:[2,2,5],n1:[30,30,60],n2:[20,20,40],unlock:1},
+    starforge:{name:'Starforge',icon:'🔥',bg:[15,8,5],n1:[255,140,0],n2:[255,69,0],unlock:5},
+    sanctuary:{name:'Sanctuary',icon:'🏛️',bg:[8,12,18],n1:[100,149,237],n2:[135,206,250],unlock:10}
+};
+
+const EMOTES=['👋','💫','❤️','🎉','🌟','✨','🔥','💭','😊','🤝','👀','💕'];
+
+const ACHIEVEMENTS=[
+    {id:'first_whisper',name:'First Words',desc:'Send your first whisper',icon:'💬',reward:10,track:'whispers',need:1},
+    {id:'chatterbox',name:'Chatterbox',desc:'Send 50 whispers',icon:'🗣️',reward:50,track:'whispers',need:50},
+    {id:'first_conn',name:'Kindred Spirit',desc:'Form your first connection',icon:'💫',reward:25,track:'connections',need:1},
+    {id:'social',name:'Social Butterfly',desc:'Connect with 10 souls',icon:'🦋',reward:75,track:'connections',need:10},
+    {id:'star10',name:'Star Lighter',desc:'Light 10 stars',icon:'⭐',reward:20,track:'stars',need:10},
+    {id:'star100',name:'Star Collector',desc:'Light 100 stars',icon:'🌌',reward:100,track:'stars',need:100},
+    {id:'echo5',name:'Echo Planter',desc:'Plant 5 echoes',icon:'🌱',reward:30,track:'echoes',need:5},
+    {id:'realm3',name:'Realm Explorer',desc:'Visit 3 realms',icon:'🗺️',reward:40,track:'realms',need:3},
+    {id:'voice',name:'Voice Pioneer',desc:'Use voice chat',icon:'🎙️',reward:15,track:'voice',need:1},
+    {id:'lv5',name:'Nova',desc:'Reach Level 5',icon:'💥',reward:50,track:'level',need:5},
+    {id:'lv10',name:'Celestial',desc:'Reach Level 10',icon:'🌠',reward:100,track:'level',need:10},
+    {id:'bond100',name:'Deep Bond',desc:'100% bond with someone',icon:'💞',reward:60,track:'maxBond',need:100}
+];
+
+const QUESTS=[
+    {id:'whisper3',name:'Cosmic Messenger',desc:'Send 3 whispers today',icon:'💬',reward:15,track:'whispers',need:3},
+    {id:'star5',name:'Illuminate',desc:'Light 5 stars',icon:'⭐',reward:10,track:'stars',need:5},
+    {id:'connect1',name:'Make a Friend',desc:'Form a new connection',icon:'💫',reward:20,track:'connections',need:1},
+    {id:'sing2',name:'Cosmic Harmony',desc:'Sing 2 times',icon:'🎵',reward:10,track:'sings',need:2},
+    {id:'emote3',name:'Express Yourself',desc:'Use 3 emotes',icon:'😊',reward:10,track:'emotes',need:3}
+];
+
+// ===== STATE =====
+let gameActive=false,db,auth,user;
+let selectedId=null,showingSocial=false,showingAch=false,showingSettings=false,showingQuests=false;
+let msgMode=null,directTarget=null,currentRealm='genesis';
+let voiceOn=false,isSpeaking=false;
+let unlocked=new Set(),visitedRealms=new Set(['genesis']),uniqueConns=new Set();
+let settings={music:true,volume:0.7,particles:true,shake:true};
+let dailyProgress={whispers:0,stars:0,connections:0,sings:0,emotes:0};
+let stats={whispers:0,stars:0,echoes:0,connections:0,maxBond:0,voice:0,level:1,realms:1};
+
+// ===== AUDIO =====
+const Audio={
+    ctx:null,drone:null,droneGain:null,master:null,
+    init(){
+        if(this.ctx)return;
+        this.ctx=new(window.AudioContext||window.webkitAudioContext)();
+        this.master=this.ctx.createGain();
+        this.master.gain.value=settings.volume*0.5;
+        this.master.connect(this.ctx.destination);
+        this.droneGain=this.ctx.createGain();
+        this.droneGain.gain.value=0;
+        this.droneGain.connect(this.master);
+        this.drone=this.ctx.createOscillator();
+        this.drone.type='sine';
+        this.drone.frequency.value=55;
+        this.drone.connect(this.droneGain);
+        this.drone.start();
+        const lfo=this.ctx.createOscillator();
+        lfo.frequency.value=0.06;
+        const lg=this.ctx.createGain();
+        lg.gain.value=1.2;
+        lfo.connect(lg).connect(this.drone.frequency);
+        lfo.start();
+    },
+    setVolume(v){settings.volume=v;if(this.master)this.master.gain.value=v*0.5},
+    startDrone(){if(!this.ctx||!settings.music)return;if(this.ctx.state==='suspended')this.ctx.resume();this.droneGain.gain.setTargetAtTime(0.02,this.ctx.currentTime,2)},
+    stopDrone(){if(this.droneGain)this.droneGain.gain.setTargetAtTime(0,this.ctx.currentTime,1)},
+    setRealmTone(r){const f={genesis:55,nebula:62,void:41,starforge:73,sanctuary:49}[r]||55;if(this.drone)this.drone.frequency.setTargetAtTime(f,this.ctx.currentTime,2)},
+    playNote(freq,vol=0.08,dur=2){
+        if(!this.ctx||!settings.music)return;
+        const o=this.ctx.createOscillator(),g=this.ctx.createGain();
+        o.type='sine';o.frequency.value=freq;
+        const t=this.ctx.currentTime;
+        g.gain.setValueAtTime(0,t);
+        g.gain.linearRampToValueAtTime(vol*settings.volume,t+0.06);
+        g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+        o.connect(g).connect(this.master);
+        o.start(t);o.stop(t+dur);
+    },
+    playChord(int=1){const s=SCALES[currentRealm]||SCALES.genesis,b=s[Math.floor(Math.random()*s.length)],v=0.035*int;this.playNote(b,v,1.5);setTimeout(()=>this.playNote(b*1.25,v*0.75,1.3),50);setTimeout(()=>this.playNote(b*1.5,v*0.55,1.1),100)},
+    playSing(h){this.playChord(1.1)},
+    playPulse(){this.playNote(110,0.06,2);setTimeout(()=>this.playNote(165,0.05,1.7),80);setTimeout(()=>this.playNote(220,0.04,1.3),160)},
+    playEcho(){const s=SCALES[currentRealm]||SCALES.genesis;[0,2,4,5].forEach((n,i)=>setTimeout(()=>this.playNote(s[n%s.length],0.04,1.2),i*130))},
+    playLevelUp(){const s=SCALES[currentRealm]||SCALES.genesis;[0,2,4,5,4,5,7].forEach((n,i)=>setTimeout(()=>this.playNote(s[n%s.length],0.045,1),i*80))},
+    playConn(){this.playNote((SCALES[currentRealm]||SCALES.genesis)[4],0.03,0.5)},
+    playWhisperSend(){const s=SCALES[currentRealm]||SCALES.genesis;this.playNote(s[4],0.035,0.6);setTimeout(()=>this.playNote(s[5],0.03,0.4),60)},
+    playWhisperRecv(){const s=SCALES[currentRealm]||SCALES.genesis;this.playNote(s[2],0.045,0.8);setTimeout(()=>this.playNote(s[4],0.035,0.6),80)},
+    playRealmTrans(){const s=SCALES[currentRealm]||SCALES.genesis;[5,4,2,0,2,4,5].forEach((n,i)=>setTimeout(()=>this.playNote(s[n%s.length],0.04,1),i*70))},
+    playAchievement(){const s=SCALES[currentRealm]||SCALES.genesis;[0,2,4,7,4,5].forEach((n,i)=>setTimeout(()=>this.playNote(s[n%s.length],0.05,0.8),i*90))},
+    playQuestComplete(){const s=SCALES[currentRealm]||SCALES.genesis;[4,5,7].forEach((n,i)=>setTimeout(()=>this.playNote(s[n%s.length],0.04,0.6),i*100))}
+};
+
+// ===== CANVAS =====
+const canvas=document.getElementById('cosmos'),ctx=canvas.getContext('2d');
+const mmCanvas=document.getElementById('mm-canvas'),mmCtx=mmCanvas.getContext('2d');
+let W,H;
+function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight;mmCanvas.width=mmCanvas.offsetWidth*2;mmCanvas.height=mmCanvas.offsetHeight*2}
+addEventListener('resize',resize);resize();
+
+// ===== ENTITIES =====
+const camera={x:0,y:0,tx:0,ty:0,shake:0};
+const player={x:0,y:0,tx:0,ty:0,hue:Math.random()*360,xp:0,stars:0,echoes:0,singing:0,pulsing:0,emoting:null,emoteT:0,r:11,halo:55,trail:[],name:'Wanderer',id:'local-'+Math.random().toString(36).substr(2,9),born:Date.now(),bonds:new Map()};
+const others=new Map(),projectiles=[],stars=new Map(),echoes=[],particles=[],floats=[],constellations=[];
+
+class Star{constructor(x,y,lit=false,br=1,realm='genesis'){this.x=x;this.y=y;this.lit=lit;this.burst=0;this.br=br;this.tw=Math.random()*Math.PI*2;this.tws=0.015+Math.random()*0.025;this.realm=realm}}
+class Echo{constructor(x,y,text,hue,name='Unknown',realm='genesis'){this.x=x;this.y=y;this.text=text;this.hue=hue;this.name=name;this.r=9;this.pulse=0;this.realm=realm}}
+class Proj{constructor(x,y,vx,vy,text,owner,target=null){this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.text=text;this.owner=owner;this.target=target;this.life=320;this.hit=false;this.trail=[]}}
+class Float{constructor(x,y,text,hue=0,size=14,dur=1.5){this.x=x;this.y=y;this.text=text;this.hue=hue;this.size=size;this.life=1;this.decay=1/(dur*60);this.vy=-0.8}}
+
+// ===== PROCEDURAL =====
+function seed(s){const x=Math.sin(s)*43758.5453;return x-Math.floor(x)}
+function genStars(cx,cy,realm){const k=`${realm}:${cx},${cy}`;if(stars.has(k))return;const arr=[];let s=cx*12.9898+cy*78.233+realm.charCodeAt(0)*0.1;const dm=realm==='void'?0.5:realm==='nebula'?1.3:1;const cnt=Math.floor((5+seed(s)*8)*dm);for(let i=0;i<cnt;i++){s=s*1.1+i*0.7;const lx=seed(s)*CONFIG.STAR_CELL;s=s*1.3+0.5;const ly=seed(s)*CONFIG.STAR_CELL;s=s*0.9+0.3;const br=0.25+seed(s)*0.75;arr.push(new Star(cx*CONFIG.STAR_CELL+lx,cy*CONFIG.STAR_CELL+ly,false,br,realm))}stars.set(k,arr)}
+function ensureStars(x,y,realm){const cx=Math.floor(x/CONFIG.STAR_CELL),cy=Math.floor(y/CONFIG.STAR_CELL);for(let dx=-2;dx<=2;dx++)for(let dy=-2;dy<=2;dy++)genStars(cx+dx,cy+dy,realm)}
+
+// ===== GAME LOGIC =====
+function getLevel(xp){for(let i=CONFIG.LEVEL_XP.length-1;i>=0;i--)if(xp>=CONFIG.LEVEL_XP[i])return i+1;return 1}
+function getForm(lv){return CONFIG.FORMS[Math.min(lv-1,CONFIG.FORMS.length-1)]}
+function getViewR(){return CONFIG.VIEW_BASE+[...player.bonds.values()].filter(b=>b>25).length*CONFIG.VIEW_BOND}
+
+function checkAchievement(id){
+    if(unlocked.has(id))return;
+    const a=ACHIEVEMENTS.find(x=>x.id===id);
+    if(!a)return;
+    unlocked.add(id);
+    Audio.playAchievement();
+    toast(`🏆 ${a.name}!`,'achievement');
+    gainXP(a.reward,false);
+    localStorage.setItem('aura_achievements',JSON.stringify([...unlocked]));
+    updateAchievements();
+}
+
+function checkAchievements(){
+    ACHIEVEMENTS.forEach(a=>{
+        if(unlocked.has(a.id))return;
+        if(stats[a.track]>=a.need)checkAchievement(a.id);
+    });
+}
+
+function checkQuests(){
+    QUESTS.forEach(q=>{
+        const prog=dailyProgress[q.track]||0;
+        if(prog>=q.need&&!dailyProgress[q.id+'_done']){
+            dailyProgress[q.id+'_done']=true;
+            Audio.playQuestComplete();
+            toast(`✅ Quest Complete: ${q.name}`,'quest');
+            gainXP(q.reward,false);
+        }
+    });
+    updateQuests();
+}
+
+function gainXP(amt,show=true){
+    const old=getLevel(player.xp);
+    player.xp+=amt;
+    const nw=getLevel(player.xp);
+    stats.level=nw;
+    if(show)floats.push(new Float(player.x,player.y-player.halo-25,`+${amt} XP`,50,13));
+    if(nw>old){
+        Audio.playLevelUp();
+        if(settings.particles)spawn(player.x,player.y,player.hue,55,true);
+        player.r=11+nw*1.5;
+        player.halo=55+nw*8;
+        toast(`✨ Level ${nw}! You are now a ${getForm(nw)}`,'level');
+        updateRealmLocks();
+        checkAchievements();
+    }
+    updateHUD();
+}
+
+function spawn(x,y,hue,cnt=15,exp=false){
+    if(!settings.particles)return;
+    for(let i=0;i<cnt;i++){
+        const a=(i/cnt)*Math.PI*2+(exp?0:Math.random()),sp=exp?(2+Math.random()*5):(Math.random()*3);
+        particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,size:Math.random()*4.5+2,hue:hue+(Math.random()-0.5)*35});
+    }
+}
+
+function createWhisper(text,target=null){
+    let dx,dy;
+    if(target&&others.has(target)){const t=others.get(target);dx=t.x-player.x;dy=t.y-player.y}
+    else{dx=player.tx-player.x;dy=player.ty-player.y}
+    const len=Math.hypot(dx,dy);
+    if(len<10){dx=0;dy=-1}else{dx/=len;dy/=len}
+    projectiles.push(new Proj(player.x+dx*35,player.y+dy*35,dx*CONFIG.WHISPER_SPEED,dy*CONFIG.WHISPER_SPEED,text,player.id,target));
+    player.x-=dx*6;player.y-=dy*6;
+    Audio.playWhisperSend();
+    spawn(player.x+dx*35,player.y+dy*35,player.hue,10);
+    stats.whispers++;dailyProgress.whispers++;
+    checkAchievements();checkQuests();
+    broadcast({type:'whisper',x:Math.round(player.x),y:Math.round(player.y),dx,dy,text,target});
+}
+
+function doSing(){
+    player.singing=1;
+    Audio.playSing(player.hue);
+    spawn(player.x,player.y,player.hue,30,true);
+    if(settings.shake)camera.shake=0.3;
+    dailyProgress.sings++;checkQuests();
+    broadcast({type:'sing',x:Math.round(player.x),y:Math.round(player.y),hue:player.hue});
+}
+
+function doPulse(){
+    player.pulsing=1;
+    Audio.playPulse();
+    spawn(player.x,player.y,player.hue,45,true);
+    if(settings.shake)camera.shake=0.5;
+    const vr=getViewR()*1.8;let lit=0;
+    for(const[k,arr]of stars){
+        if(!k.startsWith(currentRealm+':'))continue;
+        for(const s of arr){
+            const d=Math.hypot(s.x-player.x,s.y-player.y);
+            if(d<vr&&!s.lit){s.lit=true;s.burst=1;lit++}
+        }
+    }
+    if(lit>0){player.stars+=lit;stats.stars+=lit;dailyProgress.stars+=lit;gainXP(lit*3);checkAchievements();checkQuests()}
+    broadcast({type:'pulse',x:Math.round(player.x),y:Math.round(player.y),hue:player.hue});
+}
+
+function createEcho(text){
+    const e=new Echo(player.x,player.y,text,player.hue,player.name,currentRealm);
+    echoes.push(e);player.echoes++;stats.echoes++;gainXP(25);
+    Audio.playEcho();spawn(player.x,player.y,player.hue,35,true);
+    checkAchievements();
+    broadcast({type:'echo',x:Math.round(player.x),y:Math.round(player.y),text,hue:player.hue,name:player.name,realm:currentRealm});
+    if(user&&db)db.collection('artifacts').doc(appId).collection('public').doc('data').collection('echoes').add({x:Math.round(player.x),y:Math.round(player.y),text,hue:player.hue,name:player.name,realm:currentRealm,uid:user.uid,t:Date.now()});
+}
+
+function doEmote(emoji){
+    player.emoting=emoji;player.emoteT=3.5;
+    spawn(player.x,player.y-player.halo,player.hue,12);
+    Audio.playNote((SCALES[currentRealm]||SCALES.genesis)[3],0.03,0.4);
+    dailyProgress.emotes++;checkQuests();
+    broadcast({type:'emote',x:Math.round(player.x),y:Math.round(player.y),emoji});
+}
+
+function changeRealm(id){
+    if(id===currentRealm)return;
+    const r=REALMS[id];if(!r)return;
+    if(getLevel(player.xp)<r.unlock){toast(`🔒 Unlock ${r.name} at Level ${r.unlock}`);return}
+    document.getElementById('trans-icon').textContent=r.icon;
+    document.getElementById('trans-name').textContent=r.name;
+    document.getElementById('realm-trans').classList.add('active');
+    Audio.playRealmTrans();
+    setTimeout(()=>{
+        currentRealm=id;
+        document.getElementById('realm-text').textContent=r.name;
+        document.getElementById('realm-icon').textContent=r.icon;
+        document.querySelectorAll('.realm').forEach(b=>b.classList.toggle('active',b.dataset.realm===id));
+        player.x=0;player.y=0;player.tx=0;player.ty=0;
+        camera.x=-W/2;camera.y=-H/2;
+        Audio.setRealmTone(id);
+        visitedRealms.add(id);
+        stats.realms=visitedRealms.size;
+        checkAchievements();
+        setTimeout(()=>document.getElementById('realm-trans').classList.remove('active'),800);
+    },600);
+}
+
+function toggleVoice(){
+    voiceOn=!voiceOn;
+    const btn=document.getElementById('voice-btn'),status=document.getElementById('voice-status');
+    if(voiceOn){btn.classList.add('on');btn.classList.remove('muted');btn.textContent='🎙️';status.textContent='On';stats.voice=1;checkAchievements();toast('🎙️ Voice enabled')}
+    else{btn.classList.remove('on');btn.classList.add('muted');btn.textContent='🔇';status.textContent='Off'}
+}
+
+function updateRealmLocks(){
+    const lv=getLevel(player.xp);
+    document.querySelectorAll('.realm').forEach(b=>{const r=REALMS[b.dataset.realm];if(r)b.classList.toggle('locked',lv<r.unlock)});
+}
+
+function broadcast(data){if(!user||!db)return;db.collection('artifacts').doc(appId).collection('public').doc('data').collection('events').add({...data,uid:user.uid,name:player.name,realm:currentRealm,t:Date.now()})}
+
+// ===== UPDATE =====
+function update(){
+    if(!gameActive)return;
+    const ox=player.x,oy=player.y;
+    player.x+=(player.tx-player.x)*CONFIG.DRIFT;
+    player.y+=(player.ty-player.y)*CONFIG.DRIFT;
+    if(Math.hypot(player.x-ox,player.y-oy)>0.4){player.trail.push({x:player.x,y:player.y,life:1});if(player.trail.length>35)player.trail.shift()}
+    for(let i=player.trail.length-1;i>=0;i--){player.trail[i].life-=0.022;if(player.trail[i].life<=0)player.trail.splice(i,1)}
+    
+    camera.tx=player.x-W/2;camera.ty=player.y-H/2;
+    const sx=settings.shake&&camera.shake>0?(Math.random()-0.5)*camera.shake*10:0;
+    const sy=settings.shake&&camera.shake>0?(Math.random()-0.5)*camera.shake*10:0;
+    camera.shake*=0.9;
+    camera.x+=(camera.tx-camera.x)*0.075+sx;
+    camera.y+=(camera.ty-camera.y)*0.075+sy;
+    
+    player.singing=Math.max(0,player.singing-0.016);
+    player.pulsing=Math.max(0,player.pulsing-0.01);
+    if(player.emoteT>0){player.emoteT-=0.016;if(player.emoteT<=0)player.emoting=null}
+    
+    ensureStars(player.x,player.y,currentRealm);
+    
+    // Projectiles
+    for(let i=projectiles.length-1;i>=0;i--){
+        const p=projectiles[i];
+        p.x+=p.vx;p.y+=p.vy;p.vx*=0.994;p.vy*=0.994;p.life--;
+        p.trail.push({x:p.x,y:p.y});if(p.trail.length>18)p.trail.shift();
+        if(p.target&&!p.hit&&others.has(p.target)){
+            const t=others.get(p.target);
+            const dx=t.x-p.x,dy=t.y-p.y,dist=Math.hypot(dx,dy);
+            if(dist>25){p.vx+=(dx/dist)*0.12;p.vy+=(dy/dist)*0.12;const sp=Math.hypot(p.vx,p.vy);if(sp>CONFIG.WHISPER_SPEED){p.vx=(p.vx/sp)*CONFIG.WHISPER_SPEED;p.vy=(p.vy/sp)*CONFIG.WHISPER_SPEED}}
+        }
+        if(!p.hit&&p.owner===player.id){
+            others.forEach((o,id)=>{
+                const d=Math.hypot(p.x-o.x,p.y-o.y);
+                if(d<55){
+                    p.hit=true;p.vx*=0.04;p.vy*=0.04;
+                    const cb=player.bonds.get(id)||0;
+                    const nb=Math.min(100,cb+CONFIG.BOND_GAIN);
+                    player.bonds.set(id,nb);
+                    if(nb>stats.maxBond)stats.maxBond=nb;
+                    if(cb<25&&nb>=25){stats.connections++;dailyProgress.connections++;uniqueConns.add(id);toast(`💫 Connected with ${o.name}!`,'conn');checkAchievements();checkQuests()}
+                    spawn(o.x,o.y,o.hue,18);Audio.playConn();gainXP(8);
+                    floats.push(new Float(o.x,o.y-o.halo-25,p.text,player.hue,15,2.5));
+                }
+            });
+        }
+        if(p.life<=0)projectiles.splice(i,1);
+    }
+    
+    // Bond decay
+    player.bonds.forEach((s,id)=>{const ns=Math.max(0,s-CONFIG.BOND_DECAY);if(ns===0)player.bonds.delete(id);else player.bonds.set(id,ns)});
+    
+    // Others
+    others.forEach((o,id)=>{
+        const b=player.bonds.get(id)||0;
+        if(b>35&&!o.isBot){const dx=player.x-o.x,dy=player.y-o.y,dist=Math.hypot(dx,dy);if(dist>180&&dist<CONFIG.TETHER){const f=(b/100)*0.18;o.x+=dx*f*0.012;o.y+=dy*f*0.012}}
+        if(o.trail)for(let i=o.trail.length-1;i>=0;i--){o.trail[i].life-=0.028;if(o.trail[i].life<=0)o.trail.splice(i,1)}
+        if(o.singing>0)o.singing-=0.018;
+        if(o.pulsing>0)o.pulsing-=0.012;
+        if(o.emoteT>0){o.emoteT-=0.016;if(o.emoteT<=0)o.emoting=null}
+    });
+    
+    // Stars & echoes
+    for(const[k,arr]of stars){if(!k.startsWith(currentRealm+':'))continue;for(const s of arr){if(s.burst>0)s.burst-=0.02;s.tw+=s.tws}}
+    for(const e of echoes)if(e.realm===currentRealm)e.pulse=Math.sin(Date.now()*0.002)*0.25;
+    
+    // Particles & floats
+    for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=0.965;p.vy*=0.965;p.life-=0.015;if(p.life<=0)particles.splice(i,1)}
+    for(let i=floats.length-1;i>=0;i--){const f=floats[i];f.y+=f.vy;f.life-=f.decay;if(f.life<=0)floats.splice(i,1)}
+    
+    // Constellations
+    constellations.length=0;
+    const connected=[player];
+    others.forEach((o,id)=>{if((player.bonds.get(id)||0)>45)connected.push(o)});
+    if(connected.length>=3){
+        for(let i=0;i<connected.length;i++)for(let j=i+1;j<connected.length;j++)for(let k=j+1;k<connected.length;k++){
+            const a=connected[i],b=connected[j],c=connected[k];
+            const ab=Math.hypot(a.x-b.x,a.y-b.y),bc=Math.hypot(b.x-c.x,b.y-c.y),ca=Math.hypot(c.x-a.x,c.y-a.y);
+            if(ab<280&&bc<280&&ca<280)constellations.push([a,b,c]);
+        }
+    }
+    
+    updateHUD();updateNearby();updateVoiceViz();
+}
+
+function updateHUD(){
+    const lv=getLevel(player.xp),form=getForm(lv);
+    document.getElementById('my-name').textContent=player.name;
+    document.getElementById('my-title').textContent=`${form} • Lv ${lv}`;
+    const prev=CONFIG.LEVEL_XP[lv-1]||0,next=CONFIG.LEVEL_XP[lv]||player.xp+1000;
+    const prog=((player.xp-prev)/(next-prev))*100;
+    document.getElementById('xp-val').textContent=`${player.xp} / ${next}`;
+    document.getElementById('xp-fill').style.width=`${Math.min(100,prog)}%`;
+    document.getElementById('conn-val').textContent=[...player.bonds.values()].filter(b=>b>25).length;
+    document.getElementById('star-val').textContent=player.stars;
+    const orb=document.getElementById('my-orb');
+    orb.style.background=`linear-gradient(135deg,hsl(${player.hue},70%,58%),hsl(${player.hue+35},60%,48%))`;
+    orb.style.boxShadow=`0 0 20px hsla(${player.hue},70%,50%,0.55)`;
+}
+
+function updateNearby(){
+    if(!showingSocial)return;
+    const list=document.getElementById('nearby-list'),arr=[];
+    others.forEach((o,id)=>{const d=Math.hypot(o.x-player.x,o.y-player.y);if(d<CONFIG.TETHER*2.5)arr.push({...o,id,dist:d,bond:player.bonds.get(id)||0})});
+    arr.sort((a,b)=>b.bond-a.bond);
+    if(!arr.length){list.innerHTML='<div class="empty-state"><div class="empty-icon">🌌</div><div class="empty-text">No souls nearby...</div></div>';return}
+    list.innerHTML=arr.slice(0,12).map(p=>`<div class="player-item${p.speaking?' speaking':''}" data-id="${p.id}"><div class="player-orb" style="background:linear-gradient(135deg,hsl(${p.hue},70%,55%),hsl(${p.hue+30},60%,45%));box-shadow:0 0 12px hsla(${p.hue},70%,50%,0.5)"><div class="player-speaking-ring"></div></div><div class="player-info"><div class="player-name">${p.name}</div><div class="player-status">${p.bond>25?'<span style="color:var(--blue)">Connected</span>':Math.round(p.dist)+'m'}</div></div><div class="player-bond"><div class="player-bond-fill" style="width:${p.bond}%"></div></div></div>`).join('');
+    list.querySelectorAll('.player-item').forEach(el=>el.addEventListener('click',()=>showProfile(el.dataset.id)));
+}
+
+function updateVoiceViz(){
+    const bars=document.querySelectorAll('#voice-viz .vbar');
+    if(voiceOn&&isSpeaking)bars.forEach((b,i)=>{b.style.height=`${4+Math.random()*12}px`});
+    else bars.forEach((b,i)=>{const h=[4,6,10,6,4];b.style.height=`${h[i]}px`});
+}
+
+function updateAchievements(){
+    const grid=document.getElementById('ach-grid');
+    grid.innerHTML=ACHIEVEMENTS.map(a=>{
+        const done=unlocked.has(a.id);
+        const prog=Math.min(100,(stats[a.track]||0)/a.need*100);
+        return`<div class="ach-card ${done?'unlocked':'locked'}"><div class="ach-icon">${a.icon}</div><div class="ach-info"><div class="ach-name">${a.name}</div><div class="ach-desc">${a.desc}</div><div class="ach-reward">+${a.reward} XP</div>${!done?`<div class="ach-bar"><div class="ach-bar-fill" style="width:${prog}%"></div></div>`:''}</div></div>`;
+    }).join('');
+    document.getElementById('ach-count').textContent=unlocked.size;
+    document.getElementById('ach-total').textContent=ACHIEVEMENTS.length;
+}
+
+function updateQuests(){
+    const list=document.getElementById('quest-list');
+    list.innerHTML=QUESTS.map(q=>{
+        const prog=dailyProgress[q.track]||0;
+        const done=prog>=q.need;
+        const pct=Math.min(100,prog/q.need*100);
+        return`<div class="quest-item${done?' complete':''}"><div class="quest-header"><div class="quest-name">${q.icon} ${q.name}</div><div class="quest-reward">+${q.reward} ⚡</div></div><div class="quest-desc">${q.desc}</div><div class="quest-progress"><div class="quest-bar"><div class="quest-bar-fill" style="width:${pct}%"></div></div><div class="quest-count">${prog}/${q.need}</div></div></div>`;
+    }).join('');
+}
+
+// ===== RENDER =====
+function render(){
+    const r=REALMS[currentRealm],bg=r.bg;
+    ctx.fillStyle=`rgba(${bg[0]},${bg[1]},${bg[2]},0.14)`;
+    ctx.fillRect(0,0,W,H);
+    ctx.save();ctx.translate(-camera.x,-camera.y);
+    const vr=getViewR();
+    renderNebula(r);renderBgStars();renderStars(vr);renderEchoes(vr);renderConstellations();renderTethers();renderOthers(vr);renderProjs();renderPlayer();renderParticles();renderFloats();
+    ctx.restore();
+    renderVignette(r);renderMinimap();
+    requestAnimationFrame(render);
+}
+
+function renderNebula(r){const nx=player.x*0.015,ny=player.y*0.015,n1=r.n1,n2=r.n2;let g=ctx.createRadialGradient(W/2+camera.x+Math.sin(nx)*250,H/2+camera.y+Math.cos(ny)*250,0,W/2+camera.x,H/2+camera.y,700);g.addColorStop(0,`rgba(${n1[0]},${n1[1]},${n1[2]},0.025)`);g.addColorStop(1,`rgba(${n1[0]},${n1[1]},${n1[2]},0)`);ctx.fillStyle=g;ctx.fillRect(camera.x,camera.y,W,H);g=ctx.createRadialGradient(W/2+camera.x-Math.cos(nx*0.8)*350,H/2+camera.y-Math.sin(ny*0.8)*350,0,W/2+camera.x,H/2+camera.y,550);g.addColorStop(0,`rgba(${n2[0]},${n2[1]},${n2[2]},0.02)`);g.addColorStop(1,`rgba(${n2[0]},${n2[1]},${n2[2]},0)`);ctx.fillStyle=g;ctx.fillRect(camera.x,camera.y,W,H)}
+function renderBgStars(){ctx.fillStyle='rgba(200,210,255,0.22)';for(let i=0;i<90;i++){const x=((i*73.1+camera.x*0.025)%W)+camera.x,y=((i*41.7+camera.y*0.025)%H)+camera.y,sz=((i*17)%3)*0.35+0.25;ctx.beginPath();ctx.arc(x,y,sz,0,Math.PI*2);ctx.fill()}}
+function renderStars(vr){for(const[k,arr]of stars){if(!k.startsWith(currentRealm+':'))continue;for(const s of arr){const dx=s.x-player.x,dy=s.y-player.y,dist=Math.hypot(dx,dy);if(dist>vr+180)continue;const a=Math.max(0,1-dist/vr),tw=0.75+Math.sin(s.tw)*0.25;if(s.lit){const p=1+s.burst*0.7,rad=5.5*s.br*p;ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,rad*4.5);g.addColorStop(0,`rgba(232,197,71,${0.65*a*tw})`);g.addColorStop(0.35,`rgba(232,197,71,${0.2*a*tw})`);g.addColorStop(1,'rgba(232,197,71,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(s.x,s.y,rad*4.5,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';ctx.fillStyle=`rgba(255,255,255,${a*tw})`;ctx.beginPath();ctx.arc(s.x,s.y,rad*0.55,0,Math.PI*2);ctx.fill()}else{ctx.fillStyle=`rgba(150,160,180,${0.32*a*s.br*tw})`;ctx.beginPath();ctx.arc(s.x,s.y,2.2*s.br,0,Math.PI*2);ctx.fill()}}}}
+function renderEchoes(vr){for(const e of echoes){if(e.realm!==currentRealm)continue;const dx=e.x-player.x,dy=e.y-player.y,dist=Math.hypot(dx,dy);if(dist>vr+180)continue;const a=Math.max(0,1-dist/vr),ps=1+e.pulse*0.12,rad=e.r*ps;ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(e.x,e.y,0,e.x,e.y,rad*5.5);g.addColorStop(0,`hsla(${e.hue},72%,58%,${0.55*a})`);g.addColorStop(0.35,`hsla(${e.hue},68%,48%,${0.18*a})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(e.x,e.y,rad*5.5,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';ctx.fillStyle=`rgba(255,255,255,${a*0.88})`;ctx.beginPath();ctx.arc(e.x,e.y,rad,0,Math.PI*2);ctx.fill();if(dist<90){ctx.fillStyle=`rgba(255,255,255,${a*0.82})`;ctx.font='14px Outfit';ctx.textAlign='center';ctx.fillText(e.text,e.x,e.y-rad-18);ctx.fillStyle=`rgba(255,255,255,${a*0.38})`;ctx.font='10px Outfit';ctx.fillText(`— ${e.name}`,e.x,e.y-rad-34)}}}
+function renderConstellations(){if(!constellations.length)return;ctx.globalCompositeOperation='lighter';for(const[a,b,c]of constellations){const cx=(a.x+b.x+c.x)/3,cy=(a.y+b.y+c.y)/3;const g=ctx.createRadialGradient(cx,cy,0,cx,cy,170);g.addColorStop(0,'rgba(232,197,71,0.06)');g.addColorStop(1,'rgba(232,197,71,0)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(c.x,c.y);ctx.closePath();ctx.fill();ctx.strokeStyle='rgba(232,197,71,0.28)';ctx.lineWidth=1.5;ctx.stroke()}ctx.globalCompositeOperation='source-over'}
+function renderTethers(){others.forEach((o,id)=>{const b=player.bonds.get(id)||0;if(b>18){const dist=Math.hypot(player.x-o.x,player.y-o.y);if(dist<CONFIG.TETHER){const a=(b/100)*(1-dist/CONFIG.TETHER)*0.55;ctx.globalCompositeOperation='lighter';const g=ctx.createLinearGradient(player.x,player.y,o.x,o.y);g.addColorStop(0,`hsla(${player.hue},72%,58%,${a})`);g.addColorStop(1,`hsla(${o.hue},72%,58%,${a})`);ctx.strokeStyle=g;ctx.lineWidth=1.2+b/35;ctx.beginPath();ctx.moveTo(player.x,player.y);ctx.lineTo(o.x,o.y);ctx.stroke();ctx.globalCompositeOperation='source-over'}}})}
+function renderOthers(vr){others.forEach(o=>{const dx=o.x-player.x,dy=o.y-player.y,dist=Math.hypot(dx,dy);if(dist>vr+120)return;const a=Math.max(0.08,1-dist/vr);if(o.trail&&o.trail.length>1){ctx.globalCompositeOperation='lighter';for(let i=1;i<o.trail.length;i++){const t=o.trail[i],p=o.trail[i-1];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(t.x,t.y);ctx.strokeStyle=`hsla(${o.hue},68%,55%,${t.life*0.3*a})`;ctx.lineWidth=3.5*t.life;ctx.stroke()}ctx.globalCompositeOperation='source-over'}if(o.pulsing>0){ctx.beginPath();ctx.arc(o.x,o.y,(1-o.pulsing)*220,0,Math.PI*2);ctx.strokeStyle=`hsla(${o.hue},68%,55%,${o.pulsing*a*0.5})`;ctx.lineWidth=2;ctx.stroke()}if(o.singing>0){ctx.beginPath();ctx.arc(o.x,o.y,(1-o.singing)*180,0,Math.PI*2);ctx.strokeStyle=`hsla(${o.hue},62%,52%,${o.singing*a*0.45})`;ctx.lineWidth=2;ctx.stroke()}if(o.speaking){ctx.beginPath();const ph=(Date.now()%1000)/1000;ctx.arc(o.x,o.y,o.halo+15+Math.sin(ph*Math.PI*2)*5,0,Math.PI*2);ctx.strokeStyle=`rgba(34,197,94,${0.4*a})`;ctx.lineWidth=2;ctx.stroke()}ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(o.x,o.y,0,o.x,o.y,o.halo);g.addColorStop(0,`hsla(${o.hue},72%,58%,${0.48*a})`);g.addColorStop(0.45,`hsla(${o.hue},68%,48%,${0.18*a})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(o.x,o.y,o.halo,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';ctx.fillStyle=`hsla(${o.hue},68%,72%,${a})`;ctx.beginPath();ctx.arc(o.x,o.y,o.r,0,Math.PI*2);ctx.fill();if(o.emoting&&o.emoteT>0){ctx.font='28px sans-serif';ctx.textAlign='center';ctx.fillText(o.emoting,o.x,o.y-o.halo-16)}ctx.fillStyle=`rgba(255,255,255,${a*0.68})`;ctx.font='11px Outfit';ctx.textAlign='center';ctx.fillText(o.name,o.x,o.y-o.r-14)})}
+function renderProjs(){for(const p of projectiles){const a=Math.min(1,p.life/70);if(p.trail.length>1){ctx.globalCompositeOperation='lighter';ctx.beginPath();ctx.moveTo(p.trail[0].x,p.trail[0].y);for(let i=1;i<p.trail.length;i++)ctx.lineTo(p.trail[i].x,p.trail[i].y);ctx.strokeStyle=`rgba(180,200,255,${a*0.22})`;ctx.lineWidth=2.5;ctx.stroke();ctx.globalCompositeOperation='source-over'}ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,35);g.addColorStop(0,`rgba(200,220,255,${a*0.35})`);g.addColorStop(1,'rgba(200,220,255,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,35,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';ctx.fillStyle=`rgba(255,255,255,${a})`;ctx.font='15px Outfit';ctx.textAlign='center';ctx.fillText(p.text,p.x,p.y+5)}}
+function renderPlayer(){if(player.trail.length>1){ctx.globalCompositeOperation='lighter';for(let i=1;i<player.trail.length;i++){const t=player.trail[i],p=player.trail[i-1];ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(t.x,t.y);ctx.strokeStyle=`hsla(${player.hue},70%,60%,${t.life*0.38})`;ctx.lineWidth=4.5*t.life;ctx.stroke()}ctx.globalCompositeOperation='source-over'}if(player.pulsing>0){ctx.beginPath();ctx.arc(player.x,player.y,(1-player.pulsing)*300,0,Math.PI*2);ctx.strokeStyle=`hsla(${player.hue},72%,58%,${player.pulsing*0.45})`;ctx.lineWidth=3;ctx.stroke()}if(player.singing>0){ctx.beginPath();ctx.arc(player.x,player.y,(1-player.singing)*220,0,Math.PI*2);ctx.strokeStyle=`hsla(${player.hue},65%,55%,${player.singing*0.38})`;ctx.lineWidth=2.5;ctx.stroke()}if(voiceOn&&isSpeaking){ctx.beginPath();const ph=(Date.now()%1000)/1000;ctx.arc(player.x,player.y,player.halo+18+Math.sin(ph*Math.PI*2)*6,0,Math.PI*2);ctx.strokeStyle='rgba(34,197,94,0.5)';ctx.lineWidth=2.5;ctx.stroke()}ctx.globalCompositeOperation='lighter';let g=ctx.createRadialGradient(player.x,player.y,0,player.x,player.y,player.halo*1.6);g.addColorStop(0,`hsla(${player.hue},78%,62%,0.12)`);g.addColorStop(0.45,`hsla(${player.hue},70%,55%,0.05)`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(player.x,player.y,player.halo*1.6,0,Math.PI*2);ctx.fill();g=ctx.createRadialGradient(player.x,player.y,0,player.x,player.y,player.halo);g.addColorStop(0,`hsla(${player.hue},88%,68%,0.68)`);g.addColorStop(0.38,`hsla(${player.hue},78%,58%,0.32)`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(player.x,player.y,player.halo,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';ctx.fillStyle='#fff';ctx.shadowColor=`hsla(${player.hue},78%,68%,0.75)`;ctx.shadowBlur=22;ctx.beginPath();ctx.arc(player.x,player.y,player.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;if(player.emoting&&player.emoteT>0){ctx.font='32px sans-serif';ctx.textAlign='center';ctx.fillText(player.emoting,player.x,player.y-player.halo-20)}}
+function renderParticles(){ctx.globalCompositeOperation='lighter';for(const p of particles){ctx.fillStyle=`hsla(${p.hue},72%,62%,${p.life*0.78})`;ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);ctx.fill()}ctx.globalCompositeOperation='source-over'}
+function renderFloats(){for(const f of floats){ctx.fillStyle=`hsla(${f.hue},68%,68%,${f.life})`;ctx.font=`${f.size}px Outfit`;ctx.textAlign='center';ctx.fillText(f.text,f.x,f.y)}}
+function renderVignette(r){const g=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*0.62);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(0.65,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,0.48)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
+function renderMinimap(){const mw=mmCanvas.width,mh=mmCanvas.height,sc=mw/(CONFIG.MINIMAP_R*2),r=REALMS[currentRealm],bg=r.bg;mmCtx.fillStyle=`rgba(${bg[0]},${bg[1]},${bg[2]},0.85)`;mmCtx.fillRect(0,0,mw,mh);const cx=mw/2,cy=mh/2;others.forEach(o=>{const dx=(o.x-player.x)*sc,dy=(o.y-player.y)*sc;if(Math.abs(dx)<mw/2&&Math.abs(dy)<mh/2){const b=player.bonds.get(o.id)||0,a=0.28+(b/100)*0.72;mmCtx.fillStyle=`hsla(${o.hue},68%,55%,${a})`;mmCtx.beginPath();mmCtx.arc(cx+dx,cy+dy,3,0,Math.PI*2);mmCtx.fill()}});for(const e of echoes){if(e.realm!==currentRealm)continue;const dx=(e.x-player.x)*sc,dy=(e.y-player.y)*sc;if(Math.abs(dx)<mw/2&&Math.abs(dy)<mh/2){mmCtx.fillStyle=`hsla(${e.hue},58%,48%,0.38)`;mmCtx.beginPath();mmCtx.arc(cx+dx,cy+dy,2,0,Math.PI*2);mmCtx.fill()}}mmCtx.fillStyle='#fff';mmCtx.beginPath();mmCtx.arc(cx,cy,4,0,Math.PI*2);mmCtx.fill();mmCtx.strokeStyle='rgba(232,197,71,0.18)';mmCtx.lineWidth=1;mmCtx.beginPath();mmCtx.arc(cx,cy,getViewR()*sc,0,Math.PI*2);mmCtx.stroke()}
+
+// ===== UI =====
+function toast(msg,type='default'){const c=document.getElementById('toasts'),t=document.createElement('div');t.className=`toast${type==='achievement'?' achievement':type==='quest'?' quest':''}`;const icons={level:'⭐',conn:'💫',achievement:'🏆',quest:'✅',default:'✨'};t.innerHTML=`<span>${icons[type]||icons.default}</span><span>${msg}</span>`;c.appendChild(t);setTimeout(()=>t.remove(),4300)}
+
+function showProfile(id){
+    const o=others.get(id);if(!o)return;
+    selectedId=id;
+    const card=document.getElementById('profile'),b=player.bonds.get(id)||0;
+    const lv=Math.floor((o.xp||0)/100)+1,form=CONFIG.FORMS[Math.min(lv-1,CONFIG.FORMS.length-1)];
+    const age=Math.floor((Date.now()-(o.born||Date.now()))/3600000);
+    document.getElementById('prof-banner').style.background=`linear-gradient(135deg,hsla(${o.hue},60%,40%,0.5),hsla(${o.hue+40},50%,30%,0.3))`;
+    document.getElementById('prof-avatar').style.background=`linear-gradient(135deg,hsl(${o.hue},68%,55%),hsl(${o.hue+30},58%,45%))`;
+    document.getElementById('prof-avatar').style.boxShadow=`0 0 24px hsla(${o.hue},68%,50%,0.55)`;
+    document.getElementById('prof-name').textContent=o.name;
+    document.getElementById('prof-title').textContent=`${form} • Lv ${lv}`;
+    document.getElementById('prof-stars').textContent=o.stars||0;
+    document.getElementById('prof-echoes').textContent=o.echoes||0;
+    document.getElementById('prof-age').textContent=age<1?'<1h':`${age}h`;
+    document.getElementById('prof-bond-val').textContent=`${Math.round(b)}%`;
+    document.getElementById('prof-bond-fill').style.width=`${b}%`;
+    const vs=document.getElementById('prof-voice');
+    if(o.speaking){vs.innerHTML='<span>🎙️</span> Speaking';vs.classList.add('speaking')}
+    else{vs.innerHTML='<span>🔇</span> Silent';vs.classList.remove('speaking')}
+    let cx=lastMX+20,cy=lastMY-110;
+    if(cx+290>W)cx=lastMX-310;if(cy+350>H)cy=H-360;if(cy<15)cy=15;
+    card.style.left=`${cx}px`;card.style.top=`${cy}px`;
+    card.classList.add('show');
+}
+function hideProfile(){document.getElementById('profile').classList.remove('show');selectedId=null}
+
+function setupEmotes(){const w=document.getElementById('emotes'),rad=65;EMOTES.forEach((e,i)=>{const ang=(i/EMOTES.length)*Math.PI*2-Math.PI/2,x=95+Math.cos(ang)*rad-20,y=95+Math.sin(ang)*rad-20,opt=document.createElement('div');opt.className='emote';opt.textContent=e;opt.style.left=`${x}px`;opt.style.top=`${y}px`;opt.addEventListener('click',()=>{doEmote(e);hideEmotes()});w.appendChild(opt)})}
+function showEmotes(x,y){const w=document.getElementById('emotes');let wx=x-95,wy=y-95;if(wx<10)wx=10;if(wy<10)wy=10;if(wx+190>W)wx=W-200;if(wy+190>H)wy=H-200;w.style.left=`${wx}px`;w.style.top=`${wy}px`;w.classList.add('show')}
+function hideEmotes(){document.getElementById('emotes').classList.remove('show')}
+
+function setupColorPicker(){
+    const picker=document.getElementById('color-picker');
+    const hues=[0,30,60,120,180,210,270,300,330];
+    hues.forEach(h=>{
+        const opt=document.createElement('div');
+        opt.className='color-opt';
+        opt.style.background=`linear-gradient(135deg,hsl(${h},70%,55%),hsl(${h+30},60%,45%))`;
+        opt.style.boxShadow=`0 0 10px hsla(${h},70%,50%,0.4)`;
+        if(Math.abs(h-player.hue)<15||Math.abs(h-player.hue)>345)opt.classList.add('selected');
+        opt.addEventListener('click',()=>{
+            player.hue=h;
+            document.querySelectorAll('.color-opt').forEach(c=>c.classList.remove('selected'));
+            opt.classList.add('selected');
+            updateHUD();
+        });
+        picker.appendChild(opt);
+    });
+}
+
+function closeAllPanels(){
+    ['social','achievements','settings','quests'].forEach(id=>{
+        document.getElementById(id).classList.remove('show');
+    });
+    showingSocial=showingAch=showingSettings=showingQuests=false;
+    hideProfile();hideEmotes();
+}
+
+// ===== INPUT =====
+let lastMX=0,lastMY=0;
+function handleMove(x,y){lastMX=x;lastMY=y;player.tx=camera.x+x;player.ty=camera.y+y;const c=document.getElementById('cursor');c.style.left=`${x-14}px`;c.style.top=`${y-14}px`}
+addEventListener('mousemove',e=>handleMove(e.clientX,e.clientY));
+addEventListener('touchmove',e=>{e.preventDefault();handleMove(e.touches[0].clientX,e.touches[0].clientY)},{passive:false});
+
+canvas.addEventListener('click',e=>{
+    const wx=camera.x+e.clientX,wy=camera.y+e.clientY;
+    let clicked=null,min=60;
+    others.forEach((o,id)=>{const d=Math.hypot(o.x-wx,o.y-wy);if(d<min){min=d;clicked=id}});
+    if(clicked)showProfile(clicked);else{hideProfile();hideEmotes()}
+});
+
+const msgBox=document.getElementById('msg-box'),msgInput=document.getElementById('msg-input'),msgTarget=document.getElementById('msg-target');
+
+document.getElementById('btn-whisper').addEventListener('click',()=>{msgMode='whisper';msgInput.placeholder='Whisper into the void...';msgTarget.classList.remove('show');msgBox.classList.add('show');msgInput.focus()});
+document.getElementById('btn-sing').addEventListener('click',doSing);
+document.getElementById('btn-pulse').addEventListener('click',doPulse);
+document.getElementById('btn-echo').addEventListener('click',()=>{msgMode='echo';msgInput.placeholder='Plant an eternal echo...';msgTarget.classList.remove('show');msgBox.classList.add('show');msgInput.focus()});
+document.getElementById('btn-emote').addEventListener('click',e=>{const r=e.target.getBoundingClientRect();showEmotes(r.left+r.width/2,r.top-40)});
+document.getElementById('btn-social').addEventListener('click',()=>{closeAllPanels();showingSocial=true;document.getElementById('social').classList.add('show');updateNearby()});
+document.getElementById('voice-btn').addEventListener('click',toggleVoice);
+
+document.getElementById('btn-quests').addEventListener('click',()=>{closeAllPanels();showingQuests=true;document.getElementById('quests').classList.add('show');updateQuests()});
+document.getElementById('btn-achievements').addEventListener('click',()=>{closeAllPanels();showingAch=true;document.getElementById('achievements').classList.add('show');updateAchievements()});
+document.getElementById('btn-settings').addEventListener('click',()=>{closeAllPanels();showingSettings=true;document.getElementById('settings').classList.add('show')});
+
+document.querySelectorAll('[data-close]').forEach(btn=>{btn.addEventListener('click',()=>{const id=btn.dataset.close;document.getElementById(id).classList.remove('show');if(id==='social')showingSocial=false;if(id==='achievements')showingAch=false;if(id==='settings')showingSettings=false;if(id==='quests')showingQuests=false})});
+document.querySelectorAll('.realm').forEach(b=>b.addEventListener('click',()=>{if(!b.classList.contains('locked'))changeRealm(b.dataset.realm)}));
+
+document.querySelectorAll('.toggle').forEach(t=>{t.addEventListener('click',()=>{const s=t.dataset.setting;t.classList.toggle('on');settings[s]=t.classList.contains('on');if(s==='music'){if(settings.music)Audio.startDrone();else Audio.stopDrone()}})});
+
+document.querySelectorAll('.slider').forEach(sl=>{
+    const fill=sl.querySelector('.slider-fill'),valEl=sl.parentElement.querySelector('.slider-val');
+    sl.addEventListener('click',e=>{
+        const rect=sl.getBoundingClientRect(),pct=Math.max(0,Math.min(100,(e.clientX-rect.left)/rect.width*100));
+        fill.style.width=`${pct}%`;valEl.textContent=`${Math.round(pct)}%`;
+        if(sl.dataset.setting==='volume')Audio.setVolume(pct/100);
+    });
+});
+
+msgInput.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){const text=msgInput.value.trim();if(text){if(msgMode==='echo')createEcho(text);else if(msgMode==='direct'&&directTarget){createWhisper(text,directTarget);directTarget=null}else createWhisper(text)}msgInput.value='';msgBox.classList.remove('show');msgTarget.classList.remove('show');msgMode=null}
+    else if(e.key==='Escape'){msgInput.value='';msgBox.classList.remove('show');msgTarget.classList.remove('show');msgMode=null;directTarget=null}
+});
+
+document.getElementById('prof-whisper').addEventListener('click',()=>{if(!selectedId)return;directTarget=selectedId;const o=others.get(selectedId);msgMode='direct';msgInput.placeholder=`Whisper to ${o?.name||'soul'}...`;msgTarget.textContent=`Whispering to ${o?.name}`;msgTarget.classList.add('show');msgBox.classList.add('show');msgInput.focus();hideProfile()});
+document.getElementById('prof-follow').addEventListener('click',()=>{if(!selectedId)return;const o=others.get(selectedId);if(o){player.tx=o.x;player.ty=o.y;toast(`Following ${o.name}...`)}hideProfile()});
+
+document.addEventListener('click',e=>{if(!e.target.closest('#emotes')&&!e.target.closest('#btn-emote'))hideEmotes()});
+
+document.addEventListener('keydown',e=>{
+    if(msgBox.classList.contains('show'))return;
+    switch(e.key.toLowerCase()){
+        case'w':case'1':document.getElementById('btn-whisper').click();break;
+        case's':case'2':doSing();break;
+        case'p':case'3':doPulse();break;
+        case'e':case'4':document.getElementById('btn-echo').click();break;
+        case'q':{const btn=document.getElementById('btn-emote'),r=btn.getBoundingClientRect();showEmotes(r.left+r.width/2,r.top-40)}break;
+        case'v':toggleVoice();break;
+        case'tab':e.preventDefault();document.getElementById('btn-social').click();break;
+        case'escape':closeAllPanels();break;
+    }
+});
+
+// ===== NETWORK =====
+function initNetwork(){
+    const pub=db.collection('artifacts').doc(appId).collection('public').doc('data');
+    pub.collection('players').onSnapshot(snap=>{const now=Date.now();snap.docChanges().forEach(c=>{const id=c.doc.id;if(id===user.uid)return;if(c.type==='removed')others.delete(id);else{const d=c.doc.data();if(now-d.t<30000){if(!others.has(id))others.set(id,{x:d.x,y:d.y,hue:d.hue,name:d.name||'Wanderer',xp:d.xp||0,stars:d.stars||0,echoes:d.echoes||0,r:11+Math.floor((d.xp||0)/150),halo:55+Math.floor((d.xp||0)/80),singing:0,pulsing:0,emoting:null,emoteT:0,trail:[],id,born:d.born||Date.now(),speaking:d.speaking||false,isBot:false});else{const o=others.get(id);if(Math.hypot(d.x-o.x,d.y-o.y)>5){o.trail.push({x:o.x,y:o.y,life:1});if(o.trail.length>22)o.trail.shift()}o.x=d.x;o.y=d.y;o.xp=d.xp||0;o.stars=d.stars||0;o.echoes=d.echoes||0;o.r=11+Math.floor((d.xp||0)/150);o.halo=55+Math.floor((d.xp||0)/80);o.speaking=d.speaking||false}}}})});
+    pub.collection('events').orderBy('t','desc').limit(40).onSnapshot(snap=>{snap.docChanges().forEach(c=>{if(c.type==='added'){const d=c.doc.data();if(Date.now()-d.t<3500&&d.uid!==user.uid){const o=others.get(d.uid);switch(d.type){case'sing':if(o){o.singing=1;Audio.playSing(d.hue);spawn(o.x,o.y,d.hue,18)}break;case'pulse':if(o)o.pulsing=1;break;case'whisper':if(d.target===player.id||!d.target){const dist=Math.hypot(d.x-player.x,d.y-player.y);if(dist<CONFIG.TETHER*1.5){projectiles.push(new Proj(d.x,d.y,d.dx*CONFIG.WHISPER_SPEED,d.dy*CONFIG.WHISPER_SPEED,d.text,d.uid,d.target));Audio.playWhisperRecv()}}break;case'emote':if(o){o.emoting=d.emoji;o.emoteT=3.5}break;case'echo':if(d.realm===currentRealm)echoes.push(new Echo(d.x,d.y,d.text,d.hue,d.name,d.realm));break}}}})});
+    pub.collection('echoes').orderBy('t','desc').limit(150).get().then(snap=>{snap.forEach(doc=>{const d=doc.data();echoes.push(new Echo(d.x,d.y,d.text,d.hue,d.name||'Unknown',d.realm||'genesis'))})});
+    setInterval(()=>{if(user&&gameActive)pub.collection('players').doc(user.uid).set({x:Math.round(player.x),y:Math.round(player.y),hue:player.hue,name:player.name,xp:player.xp,stars:player.stars,echoes:player.echoes,born:player.born,realm:currentRealm,speaking:isSpeaking,t:Date.now()})},700);
+    setInterval(()=>{const cutoff=Date.now()-60000;pub.collection('events').where('t','<',cutoff).limit(60).get().then(snap=>{snap.forEach(doc=>doc.ref.delete())})},25000);
+}
+
+function initBots(){
+    const names=['Cosmos','Nebula','Stellar','Aurora','Orion','Luna','Sol','Nova','Astrid','Celeste'];
+    for(let i=0;i<10;i++){const ang=Math.random()*Math.PI*2,dist=250+Math.random()*900;others.set('bot-'+i,{x:Math.cos(ang)*dist,y:Math.sin(ang)*dist,vx:(Math.random()-0.5)*1.3,vy:(Math.random()-0.5)*1.3,hue:Math.random()*360,name:names[i],xp:Math.floor(Math.random()*1000),stars:Math.floor(Math.random()*60),echoes:Math.floor(Math.random()*15),r:11+Math.floor(Math.random()*7),halo:55+Math.floor(Math.random()*40),singing:0,pulsing:0,emoting:null,emoteT:0,trail:[],id:'bot-'+i,born:Date.now()-Math.random()*7200000,speaking:false,isBot:true})}
+    setInterval(()=>{others.forEach((o,id)=>{if(!id.startsWith('bot-'))return;o.x+=o.vx;o.y+=o.vy;if(Math.hypot(o.vx,o.vy)>0.25){o.trail.push({x:o.x,y:o.y,life:1});if(o.trail.length>22)o.trail.shift()}if(Math.random()<0.012){o.vx=(Math.random()-0.5)*1.8;o.vy=(Math.random()-0.5)*1.8}if(Math.random()<0.006){o.singing=1;Audio.playSing(o.hue);spawn(o.x,o.y,o.hue,18)}if(Math.random()<0.003){o.emoting=EMOTES[Math.floor(Math.random()*EMOTES.length)];o.emoteT=3.5}const dist=Math.hypot(player.x-o.x,player.y-o.y);if(dist<600&&dist>120){o.vx+=(player.x-o.x)*0.00025;o.vy+=(player.y-o.y)*0.00025}const sp=Math.hypot(o.vx,o.vy);if(sp>1.8){o.vx=(o.vx/sp)*1.8;o.vy=(o.vy/sp)*1.8}if(o.singing>0)o.singing-=0.018;if(o.pulsing>0)o.pulsing-=0.012})},45);
+}
+
+// ===== INIT =====
+try{const saved=localStorage.getItem('aura_achievements');if(saved)unlocked=new Set(JSON.parse(saved))}catch(e){}
+
+setupEmotes();setupColorPicker();updateRealmLocks();updateQuests();
+
+document.getElementById('start').addEventListener('click',()=>{
+    player.name=document.getElementById('name-input').value.trim()||'Wanderer';
+    document.getElementById('loading').classList.add('hide');
+    setTimeout(()=>document.getElementById('loading').remove(),1500);
+    document.getElementById('onboard').classList.add('show');
+});
+
+document.getElementById('ob-go').addEventListener('click',()=>{
+    document.getElementById('onboard').classList.remove('show');
+    Audio.init();Audio.startDrone();
+    gameActive=true;
+    if(firebaseConfig&&typeof firebase!=='undefined'){
+        try{firebase.initializeApp(firebaseConfig);auth=firebase.auth();db=firebase.firestore();if(initToken)auth.signInWithCustomToken(initToken);else auth.signInAnonymously();auth.onAuthStateChanged(u=>{if(u){user=u;player.id=u.uid;initNetwork();toast('✨ Connected to the Cosmos','conn')}})}
+        catch(e){console.log('Offline:',e);initBots();toast('🌟 Exploring locally')}
+    }else{initBots();toast('🌟 Exploring locally')}
+});
+
+requestAnimationFrame(render);
+setInterval(update,16);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)Audio.stopDrone();else if(gameActive&&settings.music)Audio.startDrone()});
+</script>
+</body>
+</html>
