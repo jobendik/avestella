@@ -5,15 +5,21 @@ import { Renderer } from './game/renderer';
 import { GameLogic } from './game/logic';
 import { UIManager } from './ui/manager';
 import { NetworkManager } from './network/manager';
+import { VoiceChat } from './core/voice';
+import { PersistenceManager } from './core/persistence';
 import { Star, Echo, Projectile, Particle, FloatingText, Bot } from './game/entities';
-import type { Player, Camera, Settings, GameState, OtherPlayer } from './types';
+import type { Player, Camera, Settings, GameState, OtherPlayer, Stats, DailyProgress } from './types';
 
 // Initialize game state
 const settings: Settings = {
     music: true,
     volume: 0.7,
     particles: true,
-    shake: true
+    shake: true,
+    ptt: false,
+    vad: true,
+    sensitivity: 0.5,
+    ...PersistenceManager.loadSettings()  // Load saved settings
 };
 
 const gameState: GameState = {
@@ -33,6 +39,23 @@ const gameState: GameState = {
 // Initialize managers
 const audio = new AudioManager(settings);
 const network = new NetworkManager();
+const voiceChat = new VoiceChat(settings);
+
+// Player stats and progress
+const stats: Stats = {
+    whispers: 0,
+    stars: 0,
+    echoes: 0,
+    connections: 0,
+    maxBond: 0,
+    voice: 0,
+    level: 1,
+    realms: 1,
+    ...PersistenceManager.loadStats()
+};
+
+let dailyProgress: DailyProgress = PersistenceManager.loadDailyProgress();
+const unlocked = PersistenceManager.loadAchievements();
 
 // Canvas setup
 const canvas = document.getElementById('cosmos') as HTMLCanvasElement;
@@ -69,10 +92,10 @@ const player: Player = {
     y: Math.sin(spawnAngle) * spawnDist,
     tx: Math.cos(spawnAngle) * spawnDist,
     ty: Math.sin(spawnAngle) * spawnDist,
-    hue: Math.random() * 360,
-    xp: 0,
-    stars: 0,
-    echoes: 0,
+    hue: settings.hue || Math.random() * 360,  // Use saved hue if available
+    xp: stats.level ? CONFIG.LEVEL_XP[stats.level - 1] || 0 : 0,  // Restore XP from level
+    stars: stats.stars || 0,
+    echoes: stats.echoes || 0,
     singing: 0,
     pulsing: 0,
     emoting: null,
@@ -85,6 +108,9 @@ const player: Player = {
     born: Date.now(),
     bonds: new Map()
 };
+
+// Mouse state for click-to-move controls
+let isMouseDown = false;
 
 // UI initialization
 function setupUI(): void {
@@ -132,10 +158,24 @@ function setupUI(): void {
         UIManager.updateNearby(others);
     });
     
-    document.getElementById('voice-btn')?.addEventListener('click', () => {
-        gameState.voiceOn = !gameState.voiceOn;
-        UIManager.updateVoiceButton(gameState.voiceOn);
+    document.getElementById('voice-btn')?.addEventListener('click', toggleVoice);
+    
+    // PTT button
+    const pttBtn = document.getElementById('ptt-btn');
+    pttBtn?.addEventListener('mousedown', () => {
+        if (voiceChat.enabled && settings.ptt) voiceChat.setPTT(true);
     });
+    pttBtn?.addEventListener('mouseup', () => {
+        if (voiceChat.enabled && settings.ptt) voiceChat.setPTT(false);
+    });
+    pttBtn?.addEventListener('mouseleave', () => {
+        if (voiceChat.enabled && settings.ptt) voiceChat.setPTT(false);
+    });
+    
+    // Update PTT button visibility
+    if (pttBtn) {
+        pttBtn.style.display = settings.ptt ? 'flex' : 'none';
+    }
     
     // Quick buttons
     document.getElementById('btn-quests')?.addEventListener('click', () => {
@@ -269,16 +309,22 @@ function setupUI(): void {
         }
     });
 
-    // Mouse move
-    canvas.addEventListener('mousemove', handleMove);
+    // Mouse controls: click or hold to move
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('mouseleave', handleMouseUp);
     
-    // Canvas click
+    // Canvas click - check for player/bot clicks (profile)
     canvas.addEventListener('click', (e) => {
         const rect = canvas.getBoundingClientRect();
         const mx = (e.clientX - rect.left - W / 2) + camera.x;
         const my = (e.clientY - rect.top - H / 2) + camera.y;
         
         let clicked: string | null = null;
+        let clickedBot: Bot | null = null;
+        
+        // Check other players first
         for (const [id, other] of others) {
             const dist = Math.hypot(other.x - mx, other.y - my);
             if (dist < other.halo) {
@@ -287,24 +333,80 @@ function setupUI(): void {
             }
         }
         
+        // Check bots if no player was clicked
+        if (!clicked) {
+            for (const bot of bots) {
+                const dist = Math.hypot(bot.x - mx, bot.y - my);
+                const botR = 11 + 1.5 * Math.floor(bot.xp / 100);
+                if (dist < botR + 10) {
+                    clickedBot = bot;
+                    break;
+                }
+            }
+        }
+        
         if (clicked) {
             gameState.selectedId = clicked;
             UIManager.showProfile(others.get(clicked)!, e.clientX, e.clientY);
+            // Don't move when clicking on players
+            e.stopPropagation();
+        } else if (clickedBot) {
+            // Show a simple profile for bots
+            const botLevel = Math.floor(clickedBot.xp / 100);
+            const botAsPlayer: OtherPlayer = {
+                id: clickedBot.id,
+                name: clickedBot.name,
+                hue: clickedBot.hue,
+                xp: clickedBot.xp,
+                x: clickedBot.x,
+                y: clickedBot.y,
+                stars: 0,
+                echoes: 0,
+                r: 11 + botLevel * 1.5,
+                halo: 40 + botLevel * 5,
+                singing: 0,
+                pulsing: 0,
+                emoting: null,
+                emoteT: 0,
+                trail: clickedBot.trail,
+                born: Date.now(),
+                speaking: false,
+                isBot: true
+            };
+            gameState.selectedId = clickedBot.id;
+            UIManager.showProfile(botAsPlayer, e.clientX, e.clientY);
+            e.stopPropagation();
         } else {
             UIManager.hideProfile();
             UIManager.hideEmoteWheel();
+            // Movement is already handled by mousedown event
         }
     });
     
-    // Touch move
+    // Touch controls - hold and drag to move
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (e.touches[0]) {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.touches[0].clientX - rect.left;
+            const my = e.touches[0].clientY - rect.top;
+            const worldX = camera.x + mx;
+            const worldY = camera.y + my;
+            player.tx = worldX;
+            player.ty = worldY;
+        }
+    }, { passive: false });
+    
     canvas.addEventListener('touchmove', (e) => {
         e.preventDefault();
         if (e.touches[0]) {
             const rect = canvas.getBoundingClientRect();
             const mx = e.touches[0].clientX - rect.left;
             const my = e.touches[0].clientY - rect.top;
-            player.tx = player.x + (mx - W / 2) * 2.5;
-            player.ty = player.y + (my - H / 2) * 2.5;
+            const worldX = camera.x + mx;
+            const worldY = camera.y + my;
+            player.tx = worldX;
+            player.ty = worldY;
         }
     }, { passive: false });
 
@@ -312,12 +414,35 @@ function setupUI(): void {
     document.addEventListener('keydown', handleKeyDown);
 }
 
-function handleMove(e: MouseEvent): void {
+function handleMouseDown(e: MouseEvent): void {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    player.tx = player.x + (mx - W / 2) * 2.5;
-    player.ty = player.y + (my - H / 2) * 2.5;
+    isMouseDown = true;
+    
+    // Convert screen coordinates to world coordinates
+    const worldX = camera.x + mx;
+    const worldY = camera.y + my;
+    player.tx = worldX;
+    player.ty = worldY;
+}
+
+function handleMouseMove(e: MouseEvent): void {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    
+    // Only update movement target if mouse is held down
+    if (isMouseDown) {
+        const worldX = camera.x + mx;
+        const worldY = camera.y + my;
+        player.tx = worldX;
+        player.ty = worldY;
+    }
+}
+
+function handleMouseUp(): void {
+    isMouseDown = false;
 }
 
 function handleKeyDown(e: KeyboardEvent): void {
@@ -651,9 +776,102 @@ function updateBots(): void {
     }
 }
 
+/**
+ * Fetch nearby players from backend and update the others map
+ */
+async function fetchNearbyPlayers(): Promise<void> {
+    try {
+        const nearbyPlayers = await network.getNearbyPlayers(player.x, player.y, gameState.currentRealm);
+        
+        // Clear stale entries (tracking with a separate timestamp map)
+        const staleIds: string[] = [];
+        for (const [id] of others.entries()) {
+            // Simple staleness check - if we didn't get them in the latest fetch
+            const found = nearbyPlayers.find(p => p.id === id);
+            if (!found) {
+                staleIds.push(id);
+            }
+        }
+        staleIds.forEach(id => others.delete(id));
+        
+        // Update or add players
+        for (const p of nearbyPlayers) {
+            if (p.id !== player.id) { // Don't add self
+                const existing = others.get(p.id);
+                if (existing) {
+                    // Update existing player
+                    existing.x = p.x;
+                    existing.y = p.y;
+                    existing.name = p.name;
+                    existing.hue = p.hue;
+                    existing.xp = p.xp;
+                    existing.stars = p.stars || 0;
+                    existing.echoes = p.echoes || 0;
+                } else {
+                    // Add new player - match OtherPlayer interface
+                    const level = Math.floor(p.xp / 100);
+                    others.set(p.id, {
+                        id: p.id,
+                        x: p.x,
+                        y: p.y,
+                        name: p.name,
+                        hue: p.hue,
+                        xp: p.xp || 0,
+                        stars: p.stars || 0,
+                        echoes: p.echoes || 0,
+                        r: 11 + level * 1.5,
+                        halo: 40 + level * 5,
+                        singing: 0,
+                        pulsing: 0,
+                        emoting: null,
+                        emoteT: 0,
+                        trail: [],
+                        born: p.born || Date.now(),
+                        speaking: false,
+                        isBot: false
+                    });
+                }
+            }
+        }
+        
+        // Update nearby list if social panel is open
+        if (gameState.showingSocial) {
+            UIManager.updateNearby(others);
+        }
+    } catch (error) {
+        console.error('Failed to fetch nearby players:', error);
+    }
+}
+
+/**
+ * Fetch echoes from backend for current realm
+ */
+async function fetchEchoes(): Promise<void> {
+    try {
+        const serverEchoes = await network.getEchoes(gameState.currentRealm);
+        
+        // Add new echoes that we don't have locally
+        for (const e of serverEchoes) {
+            const exists = echoes.some(local => 
+                Math.abs(local.x - e.x) < 5 && 
+                Math.abs(local.y - e.y) < 5 && 
+                local.text === e.text
+            );
+            if (!exists && echoes.length < 100) { // Limit total echoes
+                echoes.push(new Echo(e.x, e.y, e.text, e.hue || 200, e.name || 'Unknown', e.realm || gameState.currentRealm));
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch echoes:', error);
+    }
+}
+
 function startGame(): void {
     console.log('🌌 AURA - The Social Cosmos initialized (Campfire Model)');
     console.log('Player:', player.name, 'ID:', player.id);
+    
+    // Ensure canvas dimensions are set properly (including minimap)
+    resize();
     
     // Initialize UI
     UIManager.updateHUD(player);
@@ -661,6 +879,21 @@ function startGame(): void {
     
     // Ensure stars around player
     GameLogic.ensureStars(player.x, player.y, gameState.currentRealm, stars);
+    
+    // Quest timer and daily reset
+    setInterval(updateQuestTimer, 1000);
+    setInterval(checkDailyReset, 60000);
+    
+    // Network sync: Poll for nearby players and echoes
+    setInterval(fetchNearbyPlayers, 2000); // Every 2 seconds
+    setInterval(fetchEchoes, 10000); // Every 10 seconds
+    
+    // Send player position to backend
+    network.startPositionSync(player, () => gameState.currentRealm, 3000);
+    
+    // Initial fetch
+    fetchNearbyPlayers();
+    fetchEchoes();
     
     // Start game loops
     requestAnimationFrame(render);
@@ -676,13 +909,15 @@ function update(): void {
     player.x += (player.tx - player.x) * CONFIG.DRIFT;
     player.y += (player.ty - player.y) * CONFIG.DRIFT;
     
-    // Update trail
+    // Update trail (decay faster when far from center - Campfire Model)
     if (Math.hypot(player.x - oldX, player.y - oldY) > 1.5) {
         player.trail.push({ x: player.x, y: player.y, life: 1 });
         if (player.trail.length > 45) player.trail.shift();
     }
+    const distFromCenter = Math.hypot(player.x, player.y);
+    const trailDecayRate = distFromCenter > CONFIG.CAMPFIRE_RADIUS ? 0.04 : 0.022;
     for (const t of player.trail) {
-        t.life -= 0.022;
+        t.life -= trailDecayRate;
     }
     
     // Update camera
@@ -768,7 +1003,7 @@ function render(): void {
     
     // Render UI overlays
     renderer.renderVignette();
-    renderer.renderMinimap(player, others, echoes, viewRadius, gameState.currentRealm);
+    renderer.renderMinimap(player, others, bots, echoes, viewRadius, gameState.currentRealm);
     
     requestAnimationFrame(render);
 }
@@ -796,3 +1031,129 @@ window.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 console.log('✨ AURA TypeScript initialized');
+
+// === HELPER FUNCTIONS FOR NEW FEATURES ===
+
+/**
+ * Toggle voice chat on/off
+ */
+async function toggleVoice(): Promise<void> {
+    if (voiceChat.enabled) {
+        voiceChat.disable();
+        gameState.voiceOn = false;
+        updateVoiceUI();
+        console.log('🔇 Voice disabled');
+    } else {
+        const success = await voiceChat.init();
+        if (success) {
+            gameState.voiceOn = true;
+            stats.voice = 1;
+            PersistenceManager.saveStats(stats);
+            
+            // Setup callbacks
+            voiceChat.onSpeakingChange = (speaking) => {
+                gameState.isSpeaking = speaking;
+                updateVoiceUI();
+            };
+            
+            voiceChat.onVolumeUpdate = (level) => {
+                updateVoiceViz(level);
+            };
+            
+            updateVoiceUI();
+            console.log('🎙️ Voice enabled');
+        }
+    }
+}
+
+/**
+ * Update voice UI elements
+ */
+function updateVoiceUI(): void {
+    const btn = document.getElementById('voice-btn');
+    const status = document.getElementById('voice-status');
+    const orb = document.getElementById('my-orb');
+    
+    if (voiceChat.enabled) {
+        btn?.classList.add('on');
+        btn?.classList.remove('muted');
+        if (btn) btn.textContent = '🎙️';
+        if (status) status.textContent = voiceChat.isSpeaking ? 'Talk' : 'On';
+        if (voiceChat.isSpeaking) {
+            orb?.classList.add('speaking');
+        } else {
+            orb?.classList.remove('speaking');
+        }
+    } else {
+        btn?.classList.remove('on');
+        btn?.classList.add('muted');
+        if (btn) btn.textContent = '🔇';
+        if (status) status.textContent = 'Off';
+        orb?.classList.remove('speaking');
+    }
+}
+
+/**
+ * Update voice visualization bars
+ */
+function updateVoiceViz(level: number): void {
+    const bars = document.querySelectorAll('#voice-viz .vbar');
+    const heights = [4, 6, 10, 6, 4];
+    
+    if (voiceChat.enabled && voiceChat.isSpeaking) {
+        bars.forEach((bar, i) => {
+            (bar as HTMLElement).style.height = `${heights[i] + Math.random() * level * 15}px`;
+            (bar as HTMLElement).style.background = 'var(--success)';
+        });
+    } else if (voiceChat.enabled) {
+        bars.forEach((bar, i) => {
+            (bar as HTMLElement).style.height = `${heights[i]}px`;
+            (bar as HTMLElement).style.background = 'var(--blue)';
+        });
+    } else {
+        bars.forEach((bar, i) => {
+            (bar as HTMLElement).style.height = `${heights[i]}px`;
+            (bar as HTMLElement).style.background = 'var(--text-dim)';
+        });
+    }
+}
+
+/**
+ * Update quest timer display
+ */
+function updateQuestTimer(): void {
+    const timer = document.getElementById('quest-timer');
+    if (timer) {
+        const timeLeft = PersistenceManager.getTimeUntilReset();
+        timer.textContent = `Resets in ${PersistenceManager.formatTime(timeLeft)}`;
+    }
+}
+
+/**
+ * Check if daily quests should reset
+ */
+function checkDailyReset(): void {
+    const newProgress = PersistenceManager.checkDailyReset(dailyProgress);
+    if (newProgress !== dailyProgress) {
+        dailyProgress = newProgress;
+        PersistenceManager.saveDailyProgress(dailyProgress);
+        console.log('🌅 Daily quests reset!');
+        UIManager.updateQuests();
+    }
+}
+
+/**
+ * Save all game progress
+ */
+function saveProgress(): void {
+    PersistenceManager.saveSettings(settings);
+    PersistenceManager.saveStats(stats);
+    PersistenceManager.saveDailyProgress(dailyProgress);
+    PersistenceManager.saveAchievements(unlocked);
+}
+
+// Auto-save progress periodically
+setInterval(saveProgress, 30000); // Every 30 seconds
+
+// Save on page unload
+window.addEventListener('beforeunload', saveProgress);

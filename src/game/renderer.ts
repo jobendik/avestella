@@ -16,6 +16,16 @@ export class Renderer {
         this.mmCtx = minimapCanvas.getContext('2d')!;
         this.W = canvas.width;
         this.H = canvas.height;
+        
+        // Disable image smoothing for crisp text rendering
+        this.ctx.imageSmoothingEnabled = false;
+        (this.ctx as any).webkitImageSmoothingEnabled = false;
+        (this.ctx as any).mozImageSmoothingEnabled = false;
+        
+        // Initialize minimap canvas dimensions
+        // Use explicit dimensions since offsetWidth/offsetHeight might be 0 initially
+        this.mmCanvas.width = 240;  // 120px CSS * 2 for retina
+        this.mmCanvas.height = 240; // 120px CSS * 2 for retina
     }
 
     updateDimensions(width: number, height: number): void {
@@ -148,12 +158,20 @@ export class Renderer {
             this.ctx.fill();
 
             if (dist < 90) {
-                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.82})`;
-                this.ctx.font = '14px Outfit';
+                // Text outline for readability
+                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.7})`;
+                this.ctx.lineWidth = 3;
+                this.ctx.font = 'bold 14px Outfit';
                 this.ctx.textAlign = 'center';
+                this.ctx.strokeText(e.text, e.x, e.y - rad - 18);
+                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.95})`;
                 this.ctx.fillText(e.text, e.x, e.y - rad - 18);
-                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.38})`;
+                
+                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
+                this.ctx.lineWidth = 2;
                 this.ctx.font = '10px Outfit';
+                this.ctx.strokeText(`— ${e.name}`, e.x, e.y - rad - 34);
+                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.65})`;
                 this.ctx.fillText(`— ${e.name}`, e.x, e.y - rad - 34);
             }
         }
@@ -283,10 +301,13 @@ export class Renderer {
                 this.ctx.fillText(o.emoting, o.x, o.y - o.halo - 16);
             }
 
-            // Name
-            this.ctx.fillStyle = `rgba(255,255,255,${a * 0.68})`;
-            this.ctx.font = '11px Outfit';
+            // Name with outline
+            this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.6})`;
+            this.ctx.lineWidth = 2.5;
+            this.ctx.font = 'bold 11px Outfit';
             this.ctx.textAlign = 'center';
+            this.ctx.strokeText(o.name, o.x, o.y - o.r - 14);
+            this.ctx.fillStyle = `rgba(255,255,255,${a * 0.9})`;
             this.ctx.fillText(o.name, o.x, o.y - o.r - 14);
         });
     }
@@ -333,9 +354,12 @@ export class Renderer {
             this.ctx.fill();
             
             // Name (slightly transparent to indicate it's a bot)
-            this.ctx.fillStyle = `rgba(150,180,255,${a * 0.55})`;
+            this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
+            this.ctx.lineWidth = 2;
             this.ctx.font = '10px Outfit';
             this.ctx.textAlign = 'center';
+            this.ctx.strokeText(bot.name, bot.x, bot.y - botR - 12);
+            this.ctx.fillStyle = `rgba(150,180,255,${a * 0.75})`;
             this.ctx.fillText(bot.name, bot.x, bot.y - botR - 12);
         });
     }
@@ -369,10 +393,13 @@ export class Renderer {
             this.ctx.fill();
             this.ctx.globalCompositeOperation = 'source-over';
 
-            // Text
-            this.ctx.fillStyle = `rgba(255,255,255,${a})`;
-            this.ctx.font = '15px Outfit';
+            // Text with outline for readability
+            this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.8})`;
+            this.ctx.lineWidth = 3;
+            this.ctx.font = 'bold 15px Outfit';
             this.ctx.textAlign = 'center';
+            this.ctx.strokeText(p.text, p.x, p.y + 5);
+            this.ctx.fillStyle = `rgba(255,255,255,${a})`;
             this.ctx.fillText(p.text, p.x, p.y + 5);
         }
     }
@@ -474,9 +501,14 @@ export class Renderer {
 
     renderFloats(floats: { x: number; y: number; text: string; hue: number; size: number; life: number }[]): void {
         for (const f of floats) {
-            this.ctx.fillStyle = `hsla(${f.hue},68%,68%,${f.life})`;
-            this.ctx.font = `${f.size}px Outfit`;
+            // Text outline
+            this.ctx.strokeStyle = `rgba(0,0,0,${f.life * 0.7})`;
+            this.ctx.lineWidth = 3;
+            this.ctx.font = `bold ${f.size}px Outfit`;
             this.ctx.textAlign = 'center';
+            this.ctx.strokeText(f.text, f.x, f.y);
+            // Fill text
+            this.ctx.fillStyle = `hsla(${f.hue},68%,68%,${f.life})`;
             this.ctx.fillText(f.text, f.x, f.y);
         }
     }
@@ -500,6 +532,7 @@ export class Renderer {
     renderMinimap(
         player: Player,
         others: Map<string, OtherPlayer>,
+        bots: Bot[],
         echoes: Echo[],
         viewRadius: number,
         currentRealm: string
@@ -529,6 +562,18 @@ export class Renderer {
                 this.mmCtx.fill();
             }
         });
+
+        // Render bots (guardian entities - slightly different color/opacity)
+        for (const bot of bots) {
+            const dx = (bot.x - player.x) * sc;
+            const dy = (bot.y - player.y) * sc;
+            if (Math.abs(dx) < mw / 2 && Math.abs(dy) < mh / 2) {
+                this.mmCtx.fillStyle = `hsla(${bot.hue},58%,50%,0.5)`;
+                this.mmCtx.beginPath();
+                this.mmCtx.arc(cx + dx, cy + dy, 2.5, 0, Math.PI * 2);
+                this.mmCtx.fill();
+            }
+        }
 
         // Render echoes
         for (const e of echoes) {
@@ -617,10 +662,17 @@ export class Renderer {
             
             this.ctx.restore();
             
-            // Distance text
-            this.ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.6})`;
-            this.ctx.font = '10px "Space Mono", monospace';
+            // Distance text with outline
+            this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.8})`;
+            this.ctx.lineWidth = 2;
+            this.ctx.font = 'bold 10px "Space Mono", monospace';
             this.ctx.textAlign = 'center';
+            this.ctx.strokeText(
+                `${Math.round(distToCenter)} to Campfire`,
+                arrowX,
+                arrowY + 22
+            );
+            this.ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.9})`;
             this.ctx.fillText(
                 `${Math.round(distToCenter)} to Campfire`,
                 arrowX,

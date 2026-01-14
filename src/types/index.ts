@@ -194,6 +194,10 @@ export interface Settings {
     volume: number;
     particles: boolean;
     shake: boolean;
+    ptt?: boolean;  // Push-to-talk mode
+    vad?: boolean;  // Voice activity detection
+    sensitivity?: number;  // Mic sensitivity (0-1)
+    hue?: number;  // Player color hue
 }
 
 export interface Stats {
@@ -208,12 +212,13 @@ export interface Stats {
 }
 
 export interface DailyProgress {
+    date: string;  // Date string for reset tracking
     whispers: number;
     stars: number;
     connections: number;
     sings: number;
     emotes: number;
-    [key: string]: number;
+    [key: string]: string | number;  // Allow quest completion flags
 }
 
 export interface NetworkEvent {
