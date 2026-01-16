@@ -1151,7 +1151,7 @@ export class WebSocketHandler {
                     break;
                 case 'ping':
                     // Respond to ping - echo back client's timestamp for latency calculation
-                    this.send(connection.ws, { type: 'pong', data: { timestamp: message.timestamp } });
+                    this.send(connection.ws, { type: 'pong', data: { timestamp: message.timestamp }, timestamp: Date.now() });
                     break;
             }
         } catch (error) {

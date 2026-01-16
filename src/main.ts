@@ -965,8 +965,6 @@ function hideClickProfileCard(): void {
 }
 
 // Hover tooltip - quick preview
-let _hoverTooltipVisible = false;
-
 function updateHoverTooltip(other: OtherPlayer | null, screenX: number, screenY: number): void {
     const tooltip = document.getElementById('hover-tooltip');
     if (!tooltip) return;
@@ -992,13 +990,11 @@ function updateHoverTooltip(other: OtherPlayer | null, screenX: number, screenY:
         tooltip.style.left = `${screenX}px`;
         tooltip.style.top = `${screenY - 10}px`;
         tooltip.classList.add('visible');
-        hoverTooltipVisible = true;
         
         // Change cursor to pointer
         canvas.style.cursor = 'pointer';
     } else {
         tooltip.classList.remove('visible');
-        hoverTooltipVisible = false;
         canvas.style.cursor = 'default';
     }
 }

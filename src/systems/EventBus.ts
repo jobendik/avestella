@@ -62,6 +62,8 @@ interface EventMap {
     'network:teleportSuccess': { x: number; y: number; friendId: string; friendName: string };
     // Voice signaling
     'network:voiceSignal': { fromId: string; fromName: string; signalType: string; signalData: any };
+    // Latency tracking
+    'network:latency': { latency: number };
 
     // Voice events
     'voice:enabled': void;

@@ -3,7 +3,7 @@ import { EventBus } from '../systems/EventBus';
 import type { Player, RealmId } from '../types';
 
 interface WebSocketMessage {
-    type: 'player_update' | 'player_leave' | 'player_joined' | 'players_list' | 'whisper' | 'sing' | 'pulse' | 'emote' | 'echo' | 'echo_ignite' | 'echo_ignited' | 'star_lit' | 'pong' | 'error' | 'world_state' | 'connection_made' | 'player_data' | 'xp_gain' | 'friend_added' | 'friend_removed' | 'teleport_success' | 'voice_signal' | 'cooldown' | 'add_friend' | 'remove_friend' | 'teleport_to_friend';
+    type: 'player_update' | 'player_leave' | 'player_joined' | 'players_list' | 'whisper' | 'sing' | 'pulse' | 'emote' | 'echo' | 'echo_ignite' | 'echo_ignited' | 'star_lit' | 'pong' | 'error' | 'world_state' | 'connection_made' | 'player_data' | 'xp_gain' | 'friend_added' | 'friend_removed' | 'teleport_success' | 'voice_signal' | 'cooldown' | 'add_friend' | 'remove_friend' | 'teleport_to_friend' | 'speaking';
     data: any;
     timestamp: number;
 }
@@ -337,7 +337,7 @@ export class WebSocketClient {
     /**
      * Send message through WebSocket
      */
-    private send(message: WebSocketMessage): void {
+    send(message: WebSocketMessage): void {
         if (this.ws?.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(message));
         } else {

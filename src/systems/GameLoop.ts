@@ -4,17 +4,14 @@ import { GameLogic } from '../game/logic';
 import type { Player, Camera, OtherPlayer, Settings, RealmId } from '../types';
 import type { Star, Echo, Projectile, Particle, FloatingText } from '../game/entities';
 import type { Renderer } from '../game/renderer';
-import type { BotController } from '../controllers/BotController';
 
 interface GameLoopConfig {
     renderer: Renderer;
-    botController: BotController;
     
     // State accessors
     getPlayer: () => Player;
     getCamera: () => Camera;
     getOthers: () => Map<string, OtherPlayer>;
-    getBots: () => OtherPlayer[]; // Bots are now OtherPlayers with isBot=true
     getStars: () => Map<string, Star[]>;
     getEchoes: () => Echo[];
     getProjectiles: () => Projectile[];
@@ -156,10 +153,6 @@ export class GameLoop {
             }
         }
 
-        // Manage bot population (Campfire Model)
-        this.config.botController.managePopulation();
-        this.config.botController.update();
-
         // Ensure stars around player
         GameLogic.ensureStars(player.x, player.y, currentRealm, stars);
     }
@@ -173,7 +166,6 @@ export class GameLoop {
         const player = this.config.getPlayer();
         const camera = this.config.getCamera();
         const others = this.config.getOthers();
-        const bots = this.config.getBots();
         const stars = this.config.getStars();
         const echoes = this.config.getEchoes();
         const projectiles = this.config.getProjectiles();
@@ -200,7 +192,7 @@ export class GameLoop {
         renderer.renderConstellations(constellations);
         renderer.renderTethers(player, others);
         renderer.renderOthers(others, player, viewRadius);
-        renderer.renderBots(bots, player, viewRadius);
+        // NOTE: Bots are rendered via renderOthers (they have isBot=true in others map)
         renderer.renderProjectiles(projectiles);
         renderer.renderPlayer(player, voiceOn, isSpeaking);
         renderer.renderParticles(particles);
