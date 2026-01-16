@@ -149,11 +149,12 @@ export class UIManager {
             genesis: 1,
             nebula: 1,
             void: 1,
-            starforge: 5,
-            abyss: 7,
-            crystal: 8,
-            sanctuary: 10,
-            celestial: 11
+            starforge: 2,
+            abyss: 3,
+            crystal: 4,
+            sanctuary: 5,
+            celestial: 6,
+            tagarena: 2  // Tag Arena unlocks at level 2
         };
 
         realmButtons.forEach(btn => {

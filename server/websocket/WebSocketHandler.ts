@@ -43,6 +43,7 @@ interface PlayerConnection {
     friends: Set<string>;  // Friend IDs from database
     achievements: string[];
     dirty: boolean;  // Needs to be saved to database
+    speaking: boolean;  // Voice chat speaking state
 }
 
 interface WebSocketMessage {
@@ -51,7 +52,16 @@ interface WebSocketMessage {
     timestamp: number;
 }
 
-// Server-side Bot class
+// Bot names for variety
+const BOT_NAMES = ['Luna', 'Sol', 'Nova', 'Atlas', 'Lyra', 'Echo', 'Zen', 'Mira', 'Orion', 'Flux', 'Vega', 'Kai', 'Iris', 'Aria', 'Juno', 'Nix', 'Ember', 'Sage', 'River', 'Sky'];
+
+// Bot chat messages - more conversational and social
+const BOT_GREETINGS = ['Hello! ✨', 'Hi there!', 'Welcome!', 'Hey!', '*waves*', 'Nice to see you!', 'Hello friend!'];
+const BOT_THOUGHTS = ['The stars are beautiful tonight...', 'I love this place', 'So peaceful here', 'Anyone want to explore?', 'Let\'s light some stars!', 'Connection is everything', 'Together we shine brighter', 'The void speaks to me...', 'I sense kindred spirits nearby', 'What brings you here?'];
+const BOT_REACTIONS = ['Wow!', 'Beautiful!', 'Amazing!', '✨✨✨', 'Love it!', 'So cool!', 'Yes!', 'Incredible!'];
+const BOT_QUESTIONS = ['How are you?', 'What\'s your name?', 'Seen any new stars?', 'Want to connect?', 'Shall we explore together?', 'Feeling the cosmic energy?'];
+
+// Server-side Bot class - Enhanced for social interactions
 class ServerBot {
     id: string;
     x: number;
@@ -64,11 +74,19 @@ class ServerBot {
     moveAngle: number;
     actionTimer: number;
     thinkTimer: number;
+    chatTimer: number;  // NEW: Chat cooldown
     realm: string;
     singing: number;
     pulsing: number;
     emoting: string | null;
-    bonds: Map<string, number>;  // Bond strength to players (0-100)
+    bonds: Map<string, number>;
+    // NEW: Enhanced behavior state
+    currentMessage: string | null;
+    messageTimer: number;
+    targetPlayerId: string | null;  // Bot can focus on a specific player
+    personality: 'social' | 'explorer' | 'mystic';  // Behavior type
+    lastGreeted: Set<string>;  // Track who we've greeted
+    excitement: number;  // Rises when near players/activity
 
     constructor(x: number, y: number, realm: string = 'genesis') {
         this.id = 'bot-' + Math.random().toString(36).substr(2, 9);
@@ -76,52 +94,215 @@ class ServerBot {
         this.y = y;
         this.vx = 0;
         this.vy = 0;
-        this.hue = 180 + Math.random() * 60;
-        this.name = 'Guardian';
+        this.hue = Math.random() * 360;  // Full color spectrum
+        this.name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)];
         this.xp = 100 + Math.random() * 800;
         this.moveAngle = Math.random() * Math.PI * 2;
-        this.actionTimer = 0;
-        this.thinkTimer = 0;
+        this.actionTimer = Math.floor(Math.random() * 100);  // Stagger initial actions
+        this.thinkTimer = Math.floor(Math.random() * 200);
+        this.chatTimer = 0;
         this.realm = realm;
         this.singing = 0;
         this.pulsing = 0;
         this.emoting = null;
         this.bonds = new Map();
+        // NEW: Enhanced state
+        this.currentMessage = null;
+        this.messageTimer = 0;
+        this.targetPlayerId = null;
+        this.personality = ['social', 'explorer', 'mystic'][Math.floor(Math.random() * 3)] as 'social' | 'explorer' | 'mystic';
+        this.lastGreeted = new Set();
+        this.excitement = 0;
     }
 
-    update(): void {
-        // Change movement direction
-        if (Math.random() < 0.02) {
-            this.moveAngle += (Math.random() - 0.5) * 2;
+    // Check if there are nearby players and get the closest one
+    findNearbyPlayers(connections: Map<string, PlayerConnection>): { closest: PlayerConnection | null; count: number; avgDist: number } {
+        let closest: PlayerConnection | null = null;
+        let closestDist = Infinity;
+        let count = 0;
+        let totalDist = 0;
+
+        for (const conn of connections.values()) {
+            if (conn.realm !== this.realm) continue;
+            const dist = Math.hypot(conn.x - this.x, conn.y - this.y);
+            if (dist < 600) {
+                count++;
+                totalDist += dist;
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closest = conn;
+                }
+            }
         }
 
-        // Apply movement
-        this.vx += Math.cos(this.moveAngle) * 0.2;
-        this.vy += Math.sin(this.moveAngle) * 0.2;
+        return { closest, count, avgDist: count > 0 ? totalDist / count : 0 };
+    }
+
+    update(connections: Map<string, PlayerConnection>): { action: string | null; data?: any } {
+        const nearby = this.findNearbyPlayers(connections);
+        let actionResult: { action: string | null; data?: any } = { action: null };
+
+        // Update excitement based on nearby activity
+        if (nearby.count > 0) {
+            this.excitement = Math.min(1, this.excitement + 0.02 * nearby.count);
+        } else {
+            this.excitement = Math.max(0, this.excitement - 0.005);
+        }
+
+        // ===== MOVEMENT LOGIC =====
+        const distToCenter = Math.hypot(this.x, this.y);
+
+        // Personality-based movement
+        if (this.personality === 'social' && nearby.closest) {
+            // Social bots actively seek players
+            const targetDist = Math.hypot(nearby.closest.x - this.x, nearby.closest.y - this.y);
+            if (targetDist > 80 && targetDist < 500) {
+                // Move toward the player
+                const angleToPlayer = Math.atan2(nearby.closest.y - this.y, nearby.closest.x - this.x);
+                this.moveAngle = this.moveAngle * 0.85 + angleToPlayer * 0.15;
+            } else if (targetDist <= 80) {
+                // Orbit around them gently
+                this.moveAngle += 0.03;
+            }
+        } else if (this.personality === 'explorer') {
+            // Explorers wander more actively
+            if (Math.random() < 0.04) {
+                this.moveAngle += (Math.random() - 0.5) * 2.5;
+            }
+        } else {
+            // Mystic - moves slowly, gravitates to clusters
+            if (Math.random() < 0.01) {
+                this.moveAngle += (Math.random() - 0.5) * 1.5;
+            }
+        }
+
+        // Stay within bounds but allow more range
+        if (distToCenter > 1800) {
+            const angleToCenter = Math.atan2(-this.y, -this.x);
+            this.moveAngle = this.moveAngle * 0.8 + angleToCenter * 0.2;
+        }
+
+        // Apply movement with personality-based speed
+        const speed = this.personality === 'explorer' ? 0.35 : (this.personality === 'social' ? 0.25 : 0.15);
+        this.vx += Math.cos(this.moveAngle) * speed;
+        this.vy += Math.sin(this.moveAngle) * speed;
         this.vx *= 0.94;
         this.vy *= 0.94;
         this.x += this.vx;
         this.y += this.vy;
 
-        // Stay near center (campfire model)
-        const distToCenter = Math.hypot(this.x, this.y);
-        if (distToCenter > 2000) {
-            const angleToCenter = Math.atan2(-this.y, -this.x);
-            this.moveAngle = this.moveAngle * 0.9 + angleToCenter * 0.1;
-        }
-
+        // Update timers
         this.actionTimer++;
         this.thinkTimer++;
+        this.chatTimer = Math.max(0, this.chatTimer - 1);
 
         // Decay visual effects
         this.singing = Math.max(0, this.singing - 0.02);
         this.pulsing = Math.max(0, this.pulsing - 0.02);
 
-        // Bot actions: Sing occasionally
-        if (this.actionTimer > 300 && Math.random() < 0.005) {
+        // Decay message timer
+        if (this.messageTimer > 0) {
+            this.messageTimer--;
+            if (this.messageTimer <= 0) {
+                this.currentMessage = null;
+            }
+        }
+
+        // ===== ACTION LOGIC (More Active!) =====
+
+        // Greet new nearby players
+        if (nearby.closest && !this.lastGreeted.has(nearby.closest.playerId) && this.chatTimer === 0) {
+            const greetChance = this.personality === 'social' ? 0.15 : 0.05;
+            if (Math.random() < greetChance) {
+                this.speak(BOT_GREETINGS[Math.floor(Math.random() * BOT_GREETINGS.length)]);
+                this.lastGreeted.add(nearby.closest.playerId);
+                this.chatTimer = 120;  // Cooldown
+                actionResult = { action: 'greet', data: { targetId: nearby.closest.playerId } };
+            }
+        }
+
+        // Random chat based on excitement and personality
+        if (this.chatTimer === 0 && this.thinkTimer > 150) {
+            let chatChance = 0.003 + this.excitement * 0.01;  // More likely when excited
+            if (this.personality === 'social') chatChance *= 2;
+            if (this.personality === 'mystic') chatChance *= 1.5;
+
+            if (Math.random() < chatChance && nearby.count > 0) {
+                // Choose message type based on personality
+                let message: string;
+                if (this.personality === 'social' && Math.random() < 0.4) {
+                    message = BOT_QUESTIONS[Math.floor(Math.random() * BOT_QUESTIONS.length)];
+                } else if (this.personality === 'mystic' && Math.random() < 0.5) {
+                    message = BOT_THOUGHTS[Math.floor(Math.random() * BOT_THOUGHTS.length)];
+                } else {
+                    const allMessages = [...BOT_THOUGHTS, ...BOT_REACTIONS];
+                    message = allMessages[Math.floor(Math.random() * allMessages.length)];
+                }
+                this.speak(message);
+                this.thinkTimer = 0;
+                this.chatTimer = 180;  // Longer cooldown after speaking
+            }
+        }
+
+        // Sing more often when excited or near players
+        const singChance = 0.003 + this.excitement * 0.008;
+        if (this.actionTimer > 150 && Math.random() < singChance && nearby.count > 0) {
             this.actionTimer = 0;
             this.singing = 1;
+            actionResult = { action: 'sing' };
         }
+
+        // Pulse when very excited
+        if (this.excitement > 0.7 && Math.random() < 0.005) {
+            this.pulsing = 1;
+            actionResult = { action: 'pulse' };
+        }
+
+        // Emote occasionally
+        if (Math.random() < 0.002 && nearby.count > 0) {
+            const emotes = ['✨', '💫', '🌟', '❤️', '👋', '🎵'];
+            this.emoting = emotes[Math.floor(Math.random() * emotes.length)];
+            setTimeout(() => { this.emoting = null; }, 2000);
+        }
+
+        // Clean up old greetings periodically
+        if (Math.random() < 0.001) {
+            this.lastGreeted.clear();
+        }
+
+        return actionResult;
+    }
+
+    // React to nearby activity (called when players do actions)
+    react(actionType: 'sing' | 'pulse' | 'whisper' | 'emote', distance: number): void {
+        if (distance > 400) return;  // Too far to react
+
+        // Increase excitement from nearby activity
+        this.excitement = Math.min(1, this.excitement + 0.15);
+
+        // Chance to react based on distance and personality
+        const reactChance = (1 - distance / 400) * (this.personality === 'social' ? 0.4 : 0.2);
+
+        if (Math.random() < reactChance && this.chatTimer === 0) {
+            if (actionType === 'sing') {
+                // Echo the sing or react
+                if (Math.random() < 0.3) {
+                    this.singing = 1;
+                } else {
+                    this.speak(BOT_REACTIONS[Math.floor(Math.random() * BOT_REACTIONS.length)]);
+                }
+            } else if (actionType === 'pulse') {
+                if (Math.random() < 0.3) {
+                    this.pulsing = 1;
+                }
+            }
+            this.chatTimer = 60;
+        }
+    }
+
+    speak(message: string): void {
+        this.currentMessage = message;
+        this.messageTimer = 180;  // ~3 seconds at 60fps equivalent
     }
 
     toPlayerData(): any {
@@ -136,7 +317,9 @@ class ServerBot {
             pulsing: this.pulsing,
             emoting: this.emoting,
             isBot: true,
-            realm: this.realm
+            realm: this.realm,
+            message: this.currentMessage,
+            messageTimer: this.messageTimer
         };
     }
 }
@@ -416,15 +599,27 @@ export class WebSocketHandler {
             playerPositions.set(conn.playerId, { x: conn.x, y: conn.y });
         }
 
-        // Update all bots
+        // Update all bots with connection awareness
         for (const bot of this.bots.values()) {
-            bot.update();
+            const actionResult = bot.update(this.connections);
 
             // Decay bot bonds
             this.decayBotBonds(bot);
 
             // Apply social gravity - pull bots toward bonded players
             this.applyBotSocialGravity(bot, playerPositions);
+
+            // Broadcast bot actions if needed
+            if (actionResult.action === 'sing') {
+                // Strengthen bonds with nearby players when bot sings
+                for (const conn of this.connections.values()) {
+                    if (conn.realm !== bot.realm) continue;
+                    const dist = Math.hypot(conn.x - bot.x, conn.y - bot.y);
+                    if (dist < 300) {
+                        this.strengthenBotBond(bot, conn.playerId, 5);
+                    }
+                }
+            }
         }
 
         // Broadcast world state to all connected clients
@@ -650,7 +845,8 @@ export class WebSocketHandler {
                     hue: c.hue || 200,
                     xp: c.xp || 0,
                     isBot: false,
-                    bondToViewer: viewerConn.bonds.get(c.playerId) || 0
+                    bondToViewer: viewerConn.bonds.get(c.playerId) || 0,
+                    speaking: c.speaking || false  // Voice chat speaking state
                 }));
 
                 // Build bot entities with bond info
@@ -742,7 +938,8 @@ export class WebSocketHandler {
             bonds: new Map(),
             friends: new Set(),
             achievements: [],
-            dirty: false
+            dirty: false,
+            speaking: false
         };
         this.connections.set(playerId, connection);
 
@@ -949,9 +1146,12 @@ export class WebSocketHandler {
                 case 'voice_signal':
                     this.handleVoiceSignal(connection, message.data);
                     break;
+                case 'speaking':
+                    this.handleSpeaking(connection, message.data);
+                    break;
                 case 'ping':
-                    // Respond to ping
-                    this.send(connection.ws, { type: 'pong', data: {}, timestamp: Date.now() });
+                    // Respond to ping - echo back client's timestamp for latency calculation
+                    this.send(connection.ws, { type: 'pong', data: { timestamp: message.timestamp } });
                     break;
             }
         } catch (error) {
@@ -1110,6 +1310,13 @@ export class WebSocketHandler {
 
         // Strengthen bonds with nearby players and bots (singing has wider range)
         this.strengthenNearbyBonds(connection, this.BOND_SING_GAIN, 300);
+
+        // Make nearby bots react to the sing
+        for (const bot of this.bots.values()) {
+            if (bot.realm !== connection.realm) continue;
+            const dist = Math.hypot(bot.x - connection.x, bot.y - connection.y);
+            bot.react('sing', dist);
+        }
     }
 
     /**
@@ -1141,6 +1348,13 @@ export class WebSocketHandler {
 
         // Strengthen bonds with nearby players and bots (medium range)
         this.strengthenNearbyBonds(connection, this.BOND_PULSE_GAIN, 250);
+
+        // Make nearby bots react to the pulse
+        for (const bot of this.bots.values()) {
+            if (bot.realm !== connection.realm) continue;
+            const dist = Math.hypot(bot.x - connection.x, bot.y - connection.y);
+            bot.react('pulse', dist);
+        }
     }
 
     /**
@@ -1522,6 +1736,20 @@ export class WebSocketHandler {
             },
             timestamp: Date.now()
         });
+    }
+
+    /**
+     * Handle speaking state update from voice chat
+     */
+    private handleSpeaking(connection: PlayerConnection, data: any): void {
+        if (typeof data.speaking === 'boolean') {
+            connection.speaking = data.speaking;
+            
+            // Strengthen bonds with nearby players when speaking (promotes social interaction)
+            if (data.speaking) {
+                this.strengthenNearbyBonds(connection, 2, 400);  // Voice range bond strengthening
+            }
+        }
     }
 
     /**

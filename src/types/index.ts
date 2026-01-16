@@ -48,6 +48,28 @@ export interface GameConfig {
     MAX_ECHOES: number;
     MAX_PARTICLES: number;
 
+    // Power-ups system (insp.html inspired)
+    POWERUP_SPAWN_INTERVAL: number;
+    POWERUP_SPAWN_CHANCE: number;
+    POWERUP_LIFETIME: number;
+    POWERUP_COLLECT_RADIUS: number;
+    MAX_POWERUPS: number;
+    BOOST_DURATION: number;
+    BOOST_SPEED_MULTIPLIER: number;
+
+    // Tag game settings
+    TAG_SPEED_MULTIPLIER: number;
+    TAG_IT_SPEED_BONUS: number;
+    TAG_COLLISION_RADIUS: number;
+    TAG_IMMUNITY_TIME: number;
+
+    // Camera shake intensities (enhanced)
+    SHAKE_LEVELUP: number;
+    SHAKE_TAG: number;
+    SHAKE_POWERUP: number;
+    SHAKE_ECHO: number;
+    SHAKE_CONFETTI: number;
+
     // Content arrays (exported separately but typed here for reference)
     [key: string]: any;  // Allow additional properties like ACHIEVEMENTS, EMOTES, etc.
 }
@@ -61,9 +83,17 @@ export interface RealmData {
     unlock: number;
     desc?: string;
     drone?: number;
+    // Realm-specific physics (insp.html inspired)
+    physics?: {
+        driftMultiplier?: number;  // Movement speed multiplier (default 1.0)
+        friction?: number;         // Friction coefficient (default 1.0)
+        gravity?: { x: number; y: number };  // Ambient drift force
+        particleMultiplier?: number;  // Effects intensity
+    };
+    special?: 'tag' | 'confetti' | 'zen';  // Special game mode
 }
 
-export type RealmId = 'genesis' | 'nebula' | 'void' | 'starforge' | 'sanctuary' | 'abyss' | 'crystal' | 'celestial';
+export type RealmId = 'genesis' | 'nebula' | 'void' | 'starforge' | 'sanctuary' | 'abyss' | 'crystal' | 'celestial' | 'tagarena';
 
 export interface Achievement {
     id: string;
@@ -126,6 +156,8 @@ export interface OtherPlayer {
     vx?: number;
     vy?: number;
     hue: number;
+    baseHue?: number;  // Original hue for color temperature system
+    chatHeat?: number; // 0-1 warmth from recent chat activity
     name: string;
     xp: number;
     stars: number;
@@ -144,6 +176,7 @@ export interface OtherPlayer {
     // Bot message system
     message?: string;
     messageTimer?: number;
+    messageYOffset?: number; // Floating bubble offset (starts at 0, decreases to rise)
     // Bond system - server-provided bond strength to local player
     bondToViewer?: number;
 }
@@ -211,6 +244,27 @@ export interface Particle {
     hue: number;
 }
 
+// Power-up collectible (inspiration from insp.html)
+export type PowerUpType = 'speed' | 'xp' | 'shield' | 'magnet';
+
+export interface PowerUp {
+    id: string;
+    x: number;
+    y: number;
+    type: PowerUpType;
+    life: number;  // Seconds remaining before despawn
+    pulseT: number;  // Animation timer
+    realm: string;
+}
+
+// Tag game state
+export interface TagGameState {
+    active: boolean;
+    itPlayerId: string | null;
+    survivalTime: number;  // Seconds survived (if not it)
+    lastTagTime: number;
+}
+
 export interface FloatingText {
     x: number;
     y: number;
@@ -234,6 +288,11 @@ export interface GameState {
     currentRealm: RealmId;
     voiceOn: boolean;
     isSpeaking: boolean;
+    // New features (insp.html inspired)
+    boost: number;  // 0-1 boost remaining time normalized
+    boostType: PowerUpType | null;
+    tagGame: TagGameState;
+    friends: { id: string; name: string }[];  // Cached friend list for UI
 }
 
 export interface Settings {

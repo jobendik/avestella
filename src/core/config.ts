@@ -63,6 +63,28 @@ export const CONFIG: GameConfig = {
     // Limits
     MAX_ECHOES: 100,
     MAX_PARTICLES: 500,
+    
+    // Power-ups system (insp.html inspired)
+    POWERUP_SPAWN_INTERVAL: 8000,  // ms between spawn attempts
+    POWERUP_SPAWN_CHANCE: 0.4,     // Chance to spawn when interval fires
+    POWERUP_LIFETIME: 30,          // Seconds before despawn
+    POWERUP_COLLECT_RADIUS: 35,    // Pickup distance
+    MAX_POWERUPS: 5,               // Max powerups in world at once
+    BOOST_DURATION: 3.0,           // Seconds of speed boost
+    BOOST_SPEED_MULTIPLIER: 2.2,   // Speed increase when boosted
+    
+    // Tag game settings
+    TAG_SPEED_MULTIPLIER: 1.5,     // Speed increase in tag arena
+    TAG_IT_SPEED_BONUS: 0.2,       // Extra speed for IT player
+    TAG_COLLISION_RADIUS: 30,      // Tag detection radius
+    TAG_IMMUNITY_TIME: 2000,       // ms of immunity after being tagged
+    
+    // Camera shake intensities (enhanced)
+    SHAKE_LEVELUP: 0.8,
+    SHAKE_TAG: 1.2,
+    SHAKE_POWERUP: 0.4,
+    SHAKE_ECHO: 0.25,
+    SHAKE_CONFETTI: 0.3,
 };
 
 export const SCALES: Record<RealmId, number[]> = {
@@ -74,17 +96,59 @@ export const SCALES: Record<RealmId, number[]> = {
     abyss: [110, 130.81, 146.83, 174.61, 196, 220],
     crystal: [329.63, 369.99, 415.3, 493.88, 554.37, 622.25],
     celestial: [440, 493.88, 554.37, 659.25, 739.99, 880],
+    tagarena: [329.63, 392, 440, 523.25, 587.33, 659.25],  // Energetic scale for tag arena
 };
 
 export const REALMS: Record<RealmId, RealmData> = {
-    genesis: { name: 'Genesis', icon: '🌌', bg: [5, 5, 12], n1: [78, 205, 196], n2: [255, 107, 157], unlock: 1, desc: 'The birthplace', drone: 55 },
-    nebula: { name: 'Nebula Gardens', icon: '🌸', bg: [15, 5, 20], n1: [255, 107, 157], n2: [168, 85, 247], unlock: 1, desc: 'Where echoes bloom', drone: 62 },
-    void: { name: 'The Void', icon: '🌑', bg: [2, 2, 5], n1: [30, 30, 60], n2: [20, 20, 40], unlock: 1, desc: 'Embrace darkness', drone: 41 },
-    starforge: { name: 'Starforge', icon: '🔥', bg: [15, 8, 5], n1: [255, 140, 0], n2: [255, 69, 0], unlock: 5, desc: 'Born of fire', drone: 73 },
-    sanctuary: { name: 'Sanctuary', icon: '🏛️', bg: [8, 12, 18], n1: [100, 149, 237], n2: [135, 206, 250], unlock: 10, desc: 'A haven of peace', drone: 49 },
-    abyss: { name: 'The Abyss', icon: '🌊', bg: [3, 8, 15], n1: [0, 100, 150], n2: [0, 50, 100], unlock: 15, desc: 'Depths unknown', drone: 36 },
-    crystal: { name: 'Crystal Caverns', icon: '💎', bg: [12, 8, 18], n1: [200, 150, 255], n2: [150, 100, 200], unlock: 20, desc: 'Prismatic wonder', drone: 82 },
-    celestial: { name: 'Celestial Throne', icon: '👑', bg: [15, 12, 5], n1: [255, 215, 0], n2: [255, 180, 0], unlock: 25, desc: 'For the ascended', drone: 110 },
+    genesis: { 
+        name: 'Genesis', icon: '🌌', bg: [5, 5, 12], n1: [78, 205, 196], n2: [255, 107, 157], 
+        unlock: 1, desc: 'The birthplace', drone: 55,
+        physics: { driftMultiplier: 1.0, friction: 1.0 }
+    },
+    nebula: { 
+        name: 'Nebula Gardens', icon: '🌸', bg: [15, 5, 20], n1: [255, 107, 157], n2: [168, 85, 247], 
+        unlock: 1, desc: 'Where echoes bloom', drone: 62,
+        physics: { driftMultiplier: 0.8, friction: 0.95, particleMultiplier: 1.5 },
+        special: 'confetti'  // Messages explode with particles
+    },
+    void: { 
+        name: 'The Void', icon: '🌑', bg: [2, 2, 5], n1: [30, 30, 60], n2: [20, 20, 40], 
+        unlock: 1, desc: 'Embrace darkness', drone: 41,
+        physics: { driftMultiplier: 0.6, friction: 0.88, gravity: { x: 0, y: 0.05 } }
+    },
+    starforge: { 
+        name: 'Starforge', icon: '🔥', bg: [15, 8, 5], n1: [255, 140, 0], n2: [255, 69, 0], 
+        unlock: 5, desc: 'Born of fire', drone: 73,
+        physics: { driftMultiplier: 1.3, friction: 1.1, particleMultiplier: 2.0 }
+    },
+    sanctuary: { 
+        name: 'Sanctuary', icon: '🏛️', bg: [8, 12, 18], n1: [100, 149, 237], n2: [135, 206, 250], 
+        unlock: 10, desc: 'A haven of peace', drone: 49,
+        physics: { driftMultiplier: 0.7, friction: 0.92 },
+        special: 'zen'  // Falling leaves, calming effects
+    },
+    abyss: { 
+        name: 'The Abyss', icon: '🌊', bg: [3, 8, 15], n1: [0, 100, 150], n2: [0, 50, 100], 
+        unlock: 15, desc: 'Depths unknown', drone: 36,
+        physics: { driftMultiplier: 0.5, friction: 0.85, gravity: { x: 0, y: 0.1 } }
+    },
+    crystal: { 
+        name: 'Crystal Caverns', icon: '💎', bg: [12, 8, 18], n1: [200, 150, 255], n2: [150, 100, 200], 
+        unlock: 20, desc: 'Prismatic wonder', drone: 82,
+        physics: { driftMultiplier: 1.1, friction: 1.05, particleMultiplier: 1.8 }
+    },
+    celestial: { 
+        name: 'Celestial Throne', icon: '👑', bg: [15, 12, 5], n1: [255, 215, 0], n2: [255, 180, 0], 
+        unlock: 25, desc: 'For the ascended', drone: 110,
+        physics: { driftMultiplier: 1.4, friction: 1.0, particleMultiplier: 2.5 }
+    },
+    // NEW: Tag Arena - Chase game mode (inspired by insp.html)
+    tagarena: { 
+        name: 'Tag Arena', icon: '⚡', bg: [8, 5, 15], n1: [255, 68, 102], n2: [255, 215, 0], 
+        unlock: 3, desc: 'Run! Avoid the IT player', drone: 80,
+        physics: { driftMultiplier: 1.8, friction: 0.95 },
+        special: 'tag'  // Tag game mode
+    },
 };
 
 export const EMOTES: Emote[] = [

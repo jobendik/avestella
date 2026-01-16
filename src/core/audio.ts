@@ -13,6 +13,11 @@ class AudioManager {
     private master: GainNode | null = null;
     private settings: AudioSettings;
     private currentRealm: RealmId = 'genesis';
+    
+    // Multi-oscillator drone for richer ambient sound (inspiration4)
+    private droneOscillators: OscillatorNode[] = [];
+    private droneGainNodes: GainNode[] = [];
+    private droneFrequencies = [55, 110.5, 164.8, 196]; // Suspended chord
 
     constructor(settings: AudioSettings) {
         this.settings = settings;
@@ -30,6 +35,21 @@ class AudioManager {
         this.droneGain.gain.value = 0;
         this.droneGain.connect(this.master);
 
+        // Create multi-oscillator drone for richer ambient sound
+        this.droneFrequencies.forEach(freq => {
+            const osc = this.ctx!.createOscillator();
+            const gain = this.ctx!.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.value = 0;
+            osc.connect(gain);
+            gain.connect(this.master!);
+            osc.start();
+            this.droneOscillators.push(osc);
+            this.droneGainNodes.push(gain);
+        });
+
+        // Legacy single drone for realm-specific tones
         this.drone = this.ctx.createOscillator();
         this.drone.type = 'sine';
         this.drone.frequency.value = 55;
@@ -64,6 +84,88 @@ class AudioManager {
         if (this.droneGain && this.ctx) {
             this.droneGain.gain.setTargetAtTime(0, this.ctx.currentTime, 1);
         }
+        // Also fade out multi-oscillator drone
+        this.droneGainNodes.forEach(g => {
+            if (this.ctx) g.gain.setTargetAtTime(0, this.ctx.currentTime, 1);
+        });
+    }
+
+    /**
+     * Update drone intensity based on nearby player count (inspiration4)
+     * More souls nearby = richer, fuller ambient sound
+     */
+    updateDroneProximity(nearbyCount: number): void {
+        if (!this.ctx || !this.settings.music) return;
+        
+        // Base volume + scale with nearby players (cap at reasonable level)
+        const targetVolume = 0.03 + Math.min(nearbyCount * 0.02, 0.15);
+        
+        this.droneGainNodes.forEach(g => {
+            g.gain.setTargetAtTime(targetVolume * this.settings.volume, this.ctx!.currentTime, 1);
+        });
+    }
+
+    /**
+     * Play a pentatonic chime when someone chats (inspiration4)
+     */
+    playChatChime(): void {
+        if (!this.ctx || !this.settings.music || !this.master) return;
+        
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        
+        // Pentatonic-ish frequency
+        const base = 440;
+        const freq = base * Math.pow(2, Math.floor(Math.random() * 10) / 12);
+        
+        osc.frequency.setValueAtTime(freq, now);
+        osc.type = 'triangle';
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(0.08 * this.settings.volume, now + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+        
+        osc.connect(g);
+        g.connect(this.master);
+        osc.start();
+        osc.stop(now + 2);
+    }
+
+    /**
+     * Play a named sound effect (insp.html inspired)
+     */
+    playSound(name: 'collect' | 'tag' | 'powerup' | 'snapshot'): void {
+        if (!this.ctx || !this.settings.music || !this.master) return;
+
+        switch (name) {
+            case 'collect':
+                // Ascending chime for powerup collection
+                [0, 4, 7, 12].forEach((semitone, i) => {
+                    const freq = 440 * Math.pow(2, semitone / 12);
+                    setTimeout(() => this.playNote(freq, 0.06, 0.4), i * 50);
+                });
+                break;
+
+            case 'tag':
+                // Sharp impact sound for tagging
+                this.playNote(200, 0.12, 0.15);
+                this.playNote(150, 0.1, 0.2);
+                break;
+
+            case 'powerup':
+                // Rising sparkle
+                [0, 3, 5, 7, 10, 12].forEach((semitone, i) => {
+                    const freq = 330 * Math.pow(2, semitone / 12);
+                    setTimeout(() => this.playNote(freq, 0.04, 0.3), i * 40);
+                });
+                break;
+
+            case 'snapshot':
+                // Camera shutter-like sound
+                this.playNote(800, 0.08, 0.05);
+                setTimeout(() => this.playNote(600, 0.06, 0.1), 60);
+                break;
+        }
     }
 
     setRealmTone(realm: RealmId): void {
@@ -76,7 +178,8 @@ class AudioManager {
             sanctuary: 49,
             abyss: 36,
             crystal: 82,
-            celestial: 110
+            celestial: 110,
+            tagarena: 88  // Energetic, higher pitch for action
         };
         const freq = frequencies[realm] || 55;
         if (this.drone && this.ctx) {

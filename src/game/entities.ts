@@ -141,6 +141,58 @@ export class Particle {
     }
 }
 
+// Power-up collectible (insp.html inspired)
+export type PowerUpType = 'speed' | 'xp' | 'shield' | 'magnet';
+
+export class PowerUp {
+    id: string;
+    x: number;
+    y: number;
+    type: PowerUpType;
+    life: number;
+    pulseT: number;
+    realm: string;
+    r: number;
+
+    constructor(id: string, x: number, y: number, type: PowerUpType, realm: string, lifetime: number = 30) {
+        this.id = id;
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.life = lifetime;
+        this.pulseT = 0;
+        this.realm = realm;
+        this.r = 14;
+    }
+
+    update(dt: number): void {
+        this.life -= dt;
+        this.pulseT += dt * 5;
+    }
+
+    // Get color based on type
+    getColor(): string {
+        switch (this.type) {
+            case 'speed': return '#FFD700';  // Gold
+            case 'xp': return '#7B68EE';     // Purple
+            case 'shield': return '#00CED1'; // Cyan
+            case 'magnet': return '#FF69B4'; // Pink
+            default: return '#FFD700';
+        }
+    }
+
+    // Get icon based on type
+    getIcon(): string {
+        switch (this.type) {
+            case 'speed': return '⚡';
+            case 'xp': return '✨';
+            case 'shield': return '🛡️';
+            case 'magnet': return '🧲';
+            default: return '⚡';
+        }
+    }
+}
+
 // NOTE: Bot class has been REMOVED - bots are now 100% server-authoritative
 // They come through the 'world_state' WebSocket message as part of entities
 // with isBot=true flag. See server/websocket/WebSocketHandler.ts for server-side bot logic.

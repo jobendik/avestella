@@ -2200,3 +2200,635 @@ canvas {
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.15);
 }
+
+/* ===== QUICK CHAT (Inspiration from inspiration4.html) ===== */
+#quick-chat-wrapper {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    pointer-events: none;
+}
+
+#quick-chat {
+    pointer-events: auto;
+    background: rgba(10, 12, 16, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    padding: 12px 24px;
+    border-radius: var(--radius-full);
+    width: 280px;
+    text-align: center;
+    outline: none;
+    font-family: inherit;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+    opacity: 0.5;
+    transform: translateY(10px);
+}
+
+#quick-chat:focus,
+#quick-chat:not(:placeholder-shown) {
+    opacity: 1;
+    transform: translateY(0);
+    background: rgba(30, 35, 45, 0.9);
+    width: 340px;
+    border-color: rgba(125, 211, 252, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+#quick-chat::placeholder {
+    color: var(--text-muted);
+    transition: opacity 0.2s ease;
+}
+
+#quick-chat:focus::placeholder {
+    opacity: 0.5;
+}
+
+/* ===== CLUSTER HUD (Social Network Indicator) ===== */
+#cluster-hud {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    text-align: left;
+    z-index: 50;
+    transition: opacity 0.3s ease;
+    opacity: 0;
+    pointer-events: none;
+}
+
+#cluster-hud.visible {
+    opacity: 1;
+}
+
+#cluster-count {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(125, 211, 252, 0.5);
+    line-height: 1;
+}
+
+#cluster-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+
+/* === Signal Strength HUD (inspiration3) === */
+#signal-hud {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 50;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+#signal-hud:hover {
+    opacity: 1;
+}
+
+#signal-icon {
+    font-size: 1rem;
+}
+
+#signal-val {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+#signal-val.weak {
+    color: #f59e0b;
+}
+
+#signal-val.disconnected {
+    color: #ef4444;
+}
+
+/* === Hint Pill - Onboarding (inspiration4) === */
+#hint-pill {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+    z-index: 200;
+    pointer-events: none;
+    transition: opacity 1s ease, transform 1s ease;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+#hint-pill.fade-out {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+}
+
+/* === Invite Toast (inspiration4) === */
+#invite-toast {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #d1fae5;
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 0.85rem;
+    z-index: 300;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+}
+
+#invite-toast.visible {
+    opacity: 1;
+}
+
+/* === Click Profile Card (inspiration4) === */
+#click-profile-card {
+    position: fixed;
+    width: 220px;
+    padding: 16px;
+    background: rgba(20, 25, 35, 0.92);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    z-index: 250;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    transform: translate(-50%, -110%) scale(0.95);
+}
+
+#click-profile-card.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -110%) scale(1);
+}
+
+.cpc-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.cpc-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    margin-right: 10px;
+    box-shadow: 0 0 10px currentColor;
+}
+
+.cpc-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.cpc-stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.cpc-val {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.cpc-btn {
+    width: 100%;
+    padding: 10px;
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: white;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
+    font-family: inherit;
+}
+
+.cpc-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.cpc-btn:active {
+    transform: scale(0.98);
+}
+
+.cpc-btn.primary {
+    background: rgba(125, 211, 252, 0.2);
+    border-color: rgba(125, 211, 252, 0.3);
+    color: var(--accent-bright);
+}
+
+.cpc-btn.primary:hover {
+    background: rgba(125, 211, 252, 0.3);
+}
+
+.cpc-level {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-left: auto;
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+.cpc-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.cpc-actions .cpc-btn {
+    flex: 1;
+}
+
+/* === Hover Tooltip (quick preview) === */
+#hover-tooltip {
+    position: fixed;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: rgba(20, 25, 35, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    transform: translate(-50%, -120%);
+    white-space: nowrap;
+}
+
+#hover-tooltip.visible {
+    opacity: 1;
+}
+
+.ht-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+}
+
+#ht-name {
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+#ht-level {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    #quick-chat-wrapper {
+        bottom: 100px;
+    }
+
+    #quick-chat {
+        width: 220px;
+        padding: 10px 18px;
+        font-size: 0.8rem;
+    }
+
+    #quick-chat:focus {
+        width: 280px;
+    }
+
+    #cluster-hud {
+        bottom: 105px;
+        left: 12px;
+    }
+
+    #cluster-count {
+        font-size: 1.4rem;
+    }
+
+    #hint-pill {
+        font-size: 0.8rem;
+        padding: 8px 16px;
+    }
+
+    #click-profile-card {
+        width: 200px;
+        padding: 14px;
+    }
+    
+    #quick-reactions {
+        bottom: 140px;
+        gap: 8px;
+    }
+    
+    .react-btn {
+        width: 38px;
+        height: 38px;
+        font-size: 16px;
+    }
+    
+    #boost-indicator {
+        right: 10px;
+        top: 100px;
+        padding: 8px 12px;
+    }
+    
+    #tag-hud {
+        top: 100px;
+    }
+}
+
+/* === Quick Reactions Bar (insp.html inspired) === */
+#quick-reactions {
+    position: fixed;
+    bottom: 170px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 50;
+    pointer-events: auto;
+}
+
+.react-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(20, 25, 35, 0.75);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+    font-size: 20px;
+    display: grid;
+    place-items: center;
+    transition: all 0.15s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.react-btn:hover {
+    transform: scale(1.15);
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.react-btn:active {
+    transform: scale(0.9);
+}
+
+/* === Boost Indicator (insp.html inspired) === */
+#boost-indicator {
+    position: fixed;
+    right: 20px;
+    top: 140px;
+    padding: 10px 16px;
+    background: rgba(255, 215, 0, 0.15);
+    border: 1px solid rgba(255, 215, 0, 0.4);
+    border-radius: 12px;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 100;
+    pointer-events: none;
+    animation: boost-pulse 0.5s ease infinite alternate;
+}
+
+#boost-indicator.active {
+    display: flex;
+}
+
+@keyframes boost-pulse {
+    from { box-shadow: 0 0 15px rgba(255, 215, 0, 0.3); }
+    to { box-shadow: 0 0 25px rgba(255, 215, 0, 0.6); }
+}
+
+#boost-icon {
+    font-size: 1.5rem;
+}
+
+#boost-text {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #FFD700;
+    text-transform: uppercase;
+}
+
+#boost-bar {
+    width: 80px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+#boost-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #FFD700, #FFA500);
+    border-radius: 2px;
+    transition: width 0.1s linear;
+}
+
+/* === Tag Game HUD (insp.html inspired) === */
+#tag-hud {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    z-index: 100;
+    pointer-events: none;
+}
+
+#tag-hud.active {
+    display: flex;
+}
+
+#tag-status {
+    padding: 8px 20px;
+    background: rgba(255, 68, 102, 0.2);
+    border: 1px solid rgba(255, 68, 102, 0.5);
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: tag-pulse 1s ease infinite;
+}
+
+#tag-status.is-it {
+    background: rgba(255, 68, 102, 0.4);
+    border-color: rgba(255, 68, 102, 0.8);
+}
+
+#tag-status.safe {
+    background: rgba(68, 255, 136, 0.2);
+    border-color: rgba(68, 255, 136, 0.5);
+}
+
+@keyframes tag-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+}
+
+#tag-icon {
+    font-size: 1.2rem;
+}
+
+#tag-text {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-primary);
+    text-transform: uppercase;
+}
+
+#tag-timer {
+    padding: 12px 24px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 68, 102, 0.3);
+    border-radius: 16px;
+    text-align: center;
+}
+
+#tag-timer-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 68, 102, 0.8);
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+#tag-timer-val {
+    font-size: 1.8rem;
+    font-weight: 900;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* === Snapshot Modal (insp.html inspired) === */
+#snapshot-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.92);
+    backdrop-filter: blur(8px);
+    z-index: 500;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+}
+
+#snapshot-modal.active {
+    display: flex;
+}
+
+#snapshot-img {
+    max-width: 85%;
+    max-height: 70vh;
+    border: 3px solid rgba(255, 255, 255, 0.9);
+    border-radius: 16px;
+    box-shadow: 0 0 60px rgba(125, 211, 252, 0.3);
+    object-fit: contain;
+}
+
+#snapshot-actions {
+    display: flex;
+    gap: 16px;
+}
+
+.snapshot-btn {
+    padding: 14px 28px;
+    border-radius: 99px;
+    border: none;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--text-primary);
+    color: #000;
+    box-shadow: 0 4px 20px rgba(255, 255, 255, 0.2);
+}
+
+.snapshot-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(255, 255, 255, 0.3);
+}
+
+.snapshot-btn:active {
+    transform: scale(0.97);
+}
+
+.snapshot-btn.secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.snapshot-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* === Snapshot Button in Top Bar === */
+.top-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--glass);
+    backdrop-filter: blur(12px);
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: grid;
+    place-items: center;
+    transition: all 0.2s ease;
+    pointer-events: auto;
+}
+
+.top-btn:hover {
+    background: var(--glass-hover);
+    border-color: var(--border-hover);
+    transform: scale(1.05);
+}
+
+.top-btn:active {
+    transform: scale(0.95);
+}

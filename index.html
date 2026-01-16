@@ -55,6 +55,37 @@
     <div id="cursor"></div>
     <canvas id="cosmos"></canvas>
     
+    <!-- Hint Pill - Onboarding (inspiration4) -->
+    <div id="hint-pill">You are not alone. Drift to find others.</div>
+    
+    <!-- Invite Toast (inspiration4) -->
+    <div id="invite-toast">Orbit link copied to clipboard!</div>
+    
+    <!-- Hover Tooltip (quick preview on hover) -->
+    <div id="hover-tooltip">
+        <div class="ht-dot" id="ht-dot"></div>
+        <span id="ht-name">User</span>
+        <span id="ht-level">Lv 1</span>
+    </div>
+    
+    <!-- Click Profile Card (inspiration4 style - appears on click) -->
+    <div id="click-profile-card">
+        <div class="cpc-header">
+            <div class="cpc-dot" id="cpc-dot"></div>
+            <div class="cpc-name" id="cpc-name">User</div>
+            <div class="cpc-level" id="cpc-level">Lv 1</div>
+        </div>
+        <div class="cpc-stat"><span>Age</span><span class="cpc-val" id="cpc-age">0m</span></div>
+        <div class="cpc-stat"><span>Stars</span><span class="cpc-val" id="cpc-stars">0</span></div>
+        <div class="cpc-stat"><span>Bond</span><span class="cpc-val" id="cpc-bond">0%</span></div>
+        <div class="cpc-stat"><span>XP</span><span class="cpc-val" id="cpc-xp">0</span></div>
+        <div class="cpc-actions">
+            <button class="cpc-btn" id="cpc-whisper">💬 Whisper</button>
+            <button class="cpc-btn" id="cpc-friend">⭐ Add Friend</button>
+        </div>
+        <button class="cpc-btn primary" id="cpc-invite">🔗 Invite to Orbit</button>
+    </div>
+    
     <div id="ui">
         <div id="top">
             <div id="logo-area">
@@ -62,6 +93,8 @@
                 <div id="realm-pill"><span id="realm-icon">🌌</span><span id="realm-text">Genesis</span></div>
             </div>
             <div id="top-right">
+                <!-- Snapshot button (insp.html inspired) -->
+                <button class="top-btn" id="btn-snapshot" title="Take Snapshot">📷</button>
                 <div id="voice-ctrl">
                     <button id="voice-btn" title="Toggle Voice (V)">🔇</button>
                     <button id="ptt-btn" title="Push to Talk (Hold Space)" style="display:none;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-dim);font-size:0.7rem;cursor:pointer">PTT</button>
@@ -113,6 +146,7 @@
             <div class="realm active" data-realm="genesis">🌌<div class="realm-tip">Genesis<div class="realm-tip-sub">The birthplace</div></div></div>
             <div class="realm" data-realm="nebula">🌸<div class="realm-tip">Nebula Gardens<div class="realm-tip-sub">Where echoes bloom</div></div></div>
             <div class="realm" data-realm="void">🌑<div class="realm-tip">The Void<div class="realm-tip-sub">Embrace darkness</div></div></div>
+            <div class="realm locked" data-realm="tagarena">⚡<div class="realm-tip">Tag Arena<div class="realm-tip-sub">Unlock at Lv 3</div></div></div>
             <div class="realm locked" data-realm="starforge">🔥<div class="realm-tip">Starforge<div class="realm-tip-sub">Unlock at Lv 5</div></div></div>
             <div class="realm locked" data-realm="abyss">🕳️<div class="realm-tip">The Abyss<div class="realm-tip-sub">Unlock at Lv 7</div></div></div>
             <div class="realm locked" data-realm="crystal">💎<div class="realm-tip">Crystal Caverns<div class="realm-tip-sub">Unlock at Lv 8</div></div></div>
@@ -270,8 +304,62 @@
         <!-- Emote Wheel -->
         <div id="emotes"></div>
         
+        <!-- Quick Reactions Bar (insp.html inspired) -->
+        <div id="quick-reactions">
+            <button class="react-btn" data-emoji="❤️">❤️</button>
+            <button class="react-btn" data-emoji="🔥">🔥</button>
+            <button class="react-btn" data-emoji="✨">✨</button>
+            <button class="react-btn" data-emoji="👋">👋</button>
+            <button class="react-btn" data-emoji="😊">😊</button>
+        </div>
+        
+        <!-- Quick Chat (Inspiration from inspiration4.html) -->
+        <div id="quick-chat-wrapper">
+            <input type="text" id="quick-chat" placeholder="Press Enter to chat..." maxlength="60" autocomplete="off">
+        </div>
+        
+        <!-- Boost Indicator (insp.html inspired) -->
+        <div id="boost-indicator">
+            <div id="boost-icon">⚡</div>
+            <div id="boost-text">SPEED BOOST</div>
+            <div id="boost-bar"><div id="boost-fill"></div></div>
+        </div>
+        
+        <!-- Tag Game HUD (insp.html inspired) -->
+        <div id="tag-hud">
+            <div id="tag-status">
+                <span id="tag-icon">⚡</span>
+                <span id="tag-text">SURVIVE!</span>
+            </div>
+            <div id="tag-timer">
+                <div id="tag-timer-label">Survival Time</div>
+                <div id="tag-timer-val">0.0s</div>
+            </div>
+        </div>
+        
+        <!-- Social Network HUD (shows when in cluster) -->
+        <div id="cluster-hud">
+            <div id="cluster-count">0</div>
+            <div id="cluster-label">Souls nearby</div>
+        </div>
+        
+        <!-- Signal Strength HUD (inspiration3) -->
+        <div id="signal-hud">
+            <div id="signal-icon">📡</div>
+            <div id="signal-val">100%</div>
+        </div>
+        
         <!-- Toasts -->
         <div id="toasts"></div>
+        
+        <!-- Snapshot Modal (insp.html inspired) -->
+        <div id="snapshot-modal">
+            <img id="snapshot-img" alt="Snapshot">
+            <div id="snapshot-actions">
+                <button class="snapshot-btn" id="snapshot-download">💾 Download</button>
+                <button class="snapshot-btn secondary" id="snapshot-close">✕ Close</button>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

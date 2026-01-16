@@ -431,7 +431,11 @@ export class WebSocketClient {
                     EventBus.emit('network:cooldown', message.data);
                     break;
                 case 'pong':
-                    // Server responded to ping - connection alive
+                    // Server responded to ping - calculate latency (inspiration3)
+                    if (message.data?.timestamp) {
+                        const latency = Date.now() - message.data.timestamp;
+                        EventBus.emit('network:latency', { latency });
+                    }
                     break;
                 case 'error':
                     console.error('Server error:', message.data);

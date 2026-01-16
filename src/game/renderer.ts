@@ -1,5 +1,6 @@
 // Rendering system for AURA
-import type { Player, OtherPlayer, Camera, Particle, Star, Echo, Projectile } from '../types';
+import type { Player, OtherPlayer, Camera, Particle, Star, Echo, Projectile, TagGameState } from '../types';
+import { PowerUp } from './entities';
 // Bot type removed - bots are now server-authoritative OtherPlayers
 import { CONFIG, REALMS } from '../core/config';
 
@@ -217,6 +218,7 @@ export class Renderer {
     }
 
     renderTethers(player: Player, others: Map<string, OtherPlayer>): void {
+        // First pass: Render all tethers from player
         others.forEach((o) => {
             // Use server-provided bond strength, or fall back to local bonds
             const b = o.bondToViewer ?? (player.bonds.get(o.id) || 0);
@@ -233,10 +235,12 @@ export class Renderer {
 
                     this.ctx.globalCompositeOperation = 'lighter';
                     const g = this.ctx.createLinearGradient(player.x, player.y, o.x, o.y);
-                    g.addColorStop(0, `hsla(${player.hue},72%,58%,${a})`);
-                    g.addColorStop(1, `hsla(${o.hue},72%,58%,${a})`);
+                    g.addColorStop(0, `hsla(${player.hue},72%,58%,0)`);
+                    g.addColorStop(0.15, `hsla(${player.hue},72%,58%,${a})`);
+                    g.addColorStop(0.85, `hsla(${o.hue},72%,58%,${a})`);
+                    g.addColorStop(1, `hsla(${o.hue},72%,58%,0)`);
                     this.ctx.strokeStyle = g;
-                    this.ctx.lineWidth = 1 + normalizedBond * 2; // Thicker as bond grows
+                    this.ctx.lineWidth = 1 + normalizedBond * 2.5; // Thicker as bond grows
                     this.ctx.beginPath();
                     this.ctx.moveTo(player.x, player.y);
                     this.ctx.lineTo(o.x, o.y);
@@ -245,6 +249,87 @@ export class Renderer {
                 }
             }
         });
+
+        // Second pass: Render tethers between nearby entities (social network graph)
+        // This creates a visible "social graph" effect like inspiration4.html
+        const nearbyEntities = Array.from(others.values()).filter(o => {
+            const dist = Math.hypot(player.x - o.x, player.y - o.y);
+            return dist < CONFIG.TETHER * 1.5;
+        });
+
+        for (let i = 0; i < nearbyEntities.length; i++) {
+            for (let j = i + 1; j < nearbyEntities.length; j++) {
+                const a = nearbyEntities[i];
+                const b = nearbyEntities[j];
+                const dist = Math.hypot(a.x - b.x, b.y - a.y);
+
+                if (dist < CONFIG.TETHER * 0.8) {
+                    // Faint connection between entities (graph edge)
+                    const strength = 1 - (dist / (CONFIG.TETHER * 0.8));
+                    const alpha = strength * 0.15;
+
+                    this.ctx.globalCompositeOperation = 'lighter';
+                    const g = this.ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+                    g.addColorStop(0, `hsla(${a.hue},60%,50%,0)`);
+                    g.addColorStop(0.3, `hsla(${a.hue},60%,50%,${alpha})`);
+                    g.addColorStop(0.7, `hsla(${b.hue},60%,50%,${alpha})`);
+                    g.addColorStop(1, `hsla(${b.hue},60%,50%,0)`);
+                    this.ctx.strokeStyle = g;
+                    this.ctx.lineWidth = 1;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(a.x, a.y);
+                    this.ctx.lineTo(b.x, b.y);
+                    this.ctx.stroke();
+                    this.ctx.globalCompositeOperation = 'source-over';
+                }
+            }
+        }
+    }
+
+    // NEW: Render social cluster indicator when multiple entities are close together
+    renderSocialClusters(player: Player, others: Map<string, OtherPlayer>, viewRadius: number): void {
+        // Find clusters of entities (3+ nearby each other)
+        const entities = [
+            { x: player.x, y: player.y, hue: player.hue },
+            ...Array.from(others.values())
+                .filter(o => Math.hypot(o.x - player.x, o.y - player.y) < viewRadius)
+                .map(o => ({ x: o.x, y: o.y, hue: o.hue }))
+        ];
+
+        if (entities.length < 3) return;
+
+        // Simple cluster detection: find triangles of nearby entities
+        const clusterDist = 200;
+        for (let i = 0; i < entities.length; i++) {
+            for (let j = i + 1; j < entities.length; j++) {
+                for (let k = j + 1; k < entities.length; k++) {
+                    const a = entities[i];
+                    const b = entities[j];
+                    const c = entities[k];
+
+                    const d1 = Math.hypot(a.x - b.x, a.y - b.y);
+                    const d2 = Math.hypot(b.x - c.x, b.y - c.y);
+                    const d3 = Math.hypot(c.x - a.x, c.y - a.y);
+
+                    if (d1 < clusterDist && d2 < clusterDist && d3 < clusterDist) {
+                        // Render subtle cluster glow
+                        const cx = (a.x + b.x + c.x) / 3;
+                        const cy = (a.y + b.y + c.y) / 3;
+                        const avgHue = (a.hue + b.hue + c.hue) / 3;
+
+                        this.ctx.globalCompositeOperation = 'lighter';
+                        const g = this.ctx.createRadialGradient(cx, cy, 0, cx, cy, 120);
+                        g.addColorStop(0, `hsla(${avgHue},60%,60%,0.08)`);
+                        g.addColorStop(1, `hsla(${avgHue},60%,60%,0)`);
+                        this.ctx.fillStyle = g;
+                        this.ctx.beginPath();
+                        this.ctx.arc(cx, cy, 120, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.globalCompositeOperation = 'source-over';
+                    }
+                }
+            }
+        }
     }
 
     renderOthers(others: Map<string, OtherPlayer>, player: Player, viewRadius: number): void {
@@ -341,9 +426,11 @@ export class Renderer {
                 this.ctx.fillText(o.name, o.x, o.y - o.r - 12);
 
                 // Bot message bubble (when bot is speaking a thought)
+                // Floating bubble effect: rises up as timer decreases
                 if (o.message && o.messageTimer && o.messageTimer > 0) {
                     const msgAlpha = Math.min(1, o.messageTimer / 60) * a; // Fade in/out
-                    const msgY = o.y - o.halo - 35;
+                    const floatOffset = o.messageYOffset || 0; // Bubble floats up over time
+                    const msgY = o.y - o.halo - 35 + floatOffset;
 
                     // Measure text for bubble width
                     this.ctx.font = '12px Outfit';
@@ -386,6 +473,53 @@ export class Renderer {
                 this.ctx.strokeText(o.name, o.x, o.y - o.r - 14);
                 this.ctx.fillStyle = `rgba(255,255,255,${a * 0.92})`;
                 this.ctx.fillText(o.name, o.x, o.y - o.r - 14);
+
+                // Player chat bubble (when player has sent a message)
+                // Floating bubble effect: rises up as timer decreases
+                if (o.message && o.messageTimer && o.messageTimer > 0) {
+                    const msgAlpha = Math.min(1, o.messageTimer / 60) * a; // Fade in/out
+                    const floatOffset = o.messageYOffset || 0; // Bubble floats up over time
+                    const msgY = o.y - o.halo - 38 + floatOffset;
+
+                    // Measure text for bubble width
+                    this.ctx.font = '12px Inter, sans-serif';
+                    const textWidth = this.ctx.measureText(o.message).width;
+                    const padding = 14;
+                    const bubbleWidth = Math.min(200, textWidth + padding * 2);
+                    const bubbleHeight = 24;
+
+                    // Draw bubble background (player messages have accent color)
+                    this.ctx.fillStyle = `rgba(20, 30, 50, ${msgAlpha * 0.92})`;
+                    this.ctx.beginPath();
+                    this.ctx.roundRect(
+                        o.x - bubbleWidth / 2,
+                        msgY - bubbleHeight / 2,
+                        bubbleWidth,
+                        bubbleHeight,
+                        10
+                    );
+                    this.ctx.fill();
+
+                    // Draw bubble border with player hue
+                    this.ctx.strokeStyle = `hsla(${o.hue}, 60%, 60%, ${msgAlpha * 0.6})`;
+                    this.ctx.lineWidth = 1.5;
+                    this.ctx.stroke();
+
+                    // Draw message text
+                    this.ctx.fillStyle = `rgba(255, 255, 255, ${msgAlpha * 0.95})`;
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    // Truncate long messages
+                    let displayMsg = o.message;
+                    if (this.ctx.measureText(displayMsg).width > bubbleWidth - padding * 2) {
+                        while (this.ctx.measureText(displayMsg + '...').width > bubbleWidth - padding * 2 && displayMsg.length > 0) {
+                            displayMsg = displayMsg.slice(0, -1);
+                        }
+                        displayMsg += '...';
+                    }
+                    this.ctx.fillText(displayMsg, o.x, msgY);
+                    this.ctx.textBaseline = 'alphabetic';
+                }
             }
         });
     }
@@ -563,6 +697,65 @@ export class Renderer {
             this.ctx.font = '32px sans-serif';
             this.ctx.textAlign = 'center';
             this.ctx.fillText(player.emoting, player.x, player.y - player.halo - 20);
+        }
+    }
+
+    /**
+     * Render voice proximity ring - shows voice chat range
+     * Also highlights connected peers and speakers in range
+     */
+    renderVoiceProximity(
+        player: Player,
+        others: Map<string, OtherPlayer>,
+        voiceEnabled: boolean,
+        voiceRange: number,
+        connectedPeers: Set<string>
+    ): void {
+        if (!voiceEnabled) return;
+
+        // Draw faint voice range circle (only when speaking or near others who are)
+        const nearbySpeakers = Array.from(others.values()).filter(
+            o => !o.isBot && Math.hypot(o.x - player.x, o.y - player.y) <= voiceRange
+        );
+
+        if (nearbySpeakers.length > 0) {
+            // Subtle voice range indicator
+            const ph = (Date.now() % 4000) / 4000;
+            this.ctx.beginPath();
+            this.ctx.arc(player.x, player.y, voiceRange, 0, Math.PI * 2);
+            this.ctx.strokeStyle = `rgba(34, 197, 94, ${0.08 + Math.sin(ph * Math.PI * 2) * 0.03})`;
+            this.ctx.lineWidth = 1;
+            this.ctx.setLineDash([10, 20]);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+
+            // Draw connection lines to people in voice range
+            for (const peer of nearbySpeakers) {
+                const isConnected = connectedPeers.has(peer.id);
+                const dist = Math.hypot(peer.x - player.x, peer.y - player.y);
+                const alpha = (1 - dist / voiceRange) * 0.3;
+
+                if (isConnected) {
+                    // Connected - solid green line
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(player.x, player.y);
+                    this.ctx.lineTo(peer.x, peer.y);
+                    this.ctx.strokeStyle = `rgba(34, 197, 94, ${alpha})`;
+                    this.ctx.lineWidth = peer.speaking ? 2 : 1;
+                    this.ctx.stroke();
+
+                    // If peer is speaking, add pulsing effect on the line
+                    if (peer.speaking) {
+                        const pulsePhase = (Date.now() % 500) / 500;
+                        const midX = (player.x + peer.x) / 2;
+                        const midY = (player.y + peer.y) / 2;
+                        this.ctx.beginPath();
+                        this.ctx.arc(midX, midY, 4 + pulsePhase * 4, 0, Math.PI * 2);
+                        this.ctx.fillStyle = `rgba(34, 197, 94, ${(1 - pulsePhase) * 0.6})`;
+                        this.ctx.fill();
+                    }
+                }
+            }
         }
     }
 
@@ -746,5 +939,192 @@ export class Renderer {
                 arrowY + 22
             );
         }
+    }
+
+    /**
+     * Render power-up collectibles (insp.html inspired)
+     */
+    renderPowerUps(powerups: PowerUp[], player: Player, viewRadius: number): void {
+        for (const p of powerups) {
+            const dx = p.x - player.x;
+            const dy = p.y - player.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > viewRadius + 100) continue;
+
+            const a = Math.max(0.3, 1 - dist / viewRadius);
+            const pulse = 1 + Math.sin(p.pulseT) * 0.2;
+            const color = p.getColor();
+
+            // Outer glow
+            this.ctx.globalCompositeOperation = 'lighter';
+            const g = this.ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3 * pulse);
+            g.addColorStop(0, color.replace(')', `,${0.6 * a})`).replace('rgb', 'rgba'));
+            g.addColorStop(0.4, color.replace(')', `,${0.2 * a})`).replace('rgb', 'rgba'));
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            
+            // Use hex to rgba conversion
+            const hexColor = color;
+            const r = parseInt(hexColor.slice(1, 3), 16);
+            const gVal = parseInt(hexColor.slice(3, 5), 16);
+            const b = parseInt(hexColor.slice(5, 7), 16);
+            
+            const glow = this.ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3.5 * pulse);
+            glow.addColorStop(0, `rgba(${r},${gVal},${b},${0.7 * a})`);
+            glow.addColorStop(0.5, `rgba(${r},${gVal},${b},${0.25 * a})`);
+            glow.addColorStop(1, 'rgba(0,0,0,0)');
+            this.ctx.fillStyle = glow;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, p.r * 3.5 * pulse, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.globalCompositeOperation = 'source-over';
+
+            // Core
+            this.ctx.fillStyle = color;
+            this.ctx.shadowColor = color;
+            this.ctx.shadowBlur = 15 * pulse;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, p.r * pulse, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.shadowBlur = 0;
+
+            // Icon
+            this.ctx.font = '16px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillStyle = '#000';
+            this.ctx.fillText(p.getIcon(), p.x, p.y);
+            this.ctx.textBaseline = 'alphabetic';
+
+            // Lifetime indicator ring (fades as it expires)
+            const lifeRatio = Math.min(1, p.life / 10); // Last 10 seconds
+            if (p.life < 10) {
+                this.ctx.strokeStyle = `rgba(255,255,255,${lifeRatio * 0.5})`;
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, p.r * 2, -Math.PI / 2, -Math.PI / 2 + lifeRatio * Math.PI * 2);
+                this.ctx.stroke();
+            }
+        }
+    }
+
+    /**
+     * Render tag game overlay (IT indicator, survival timer)
+     */
+    renderTagOverlay(tagState: TagGameState, player: Player, others: Map<string, OtherPlayer>): void {
+        if (!tagState.active) return;
+
+        const isIt = tagState.itPlayerId === player.id;
+        const itPlayer = tagState.itPlayerId ? others.get(tagState.itPlayerId) : null;
+
+        // IT player indicator - red glow around self
+        if (isIt) {
+            // Self is IT - draw warning overlay
+            this.ctx.save();
+            
+            // Red vignette edge
+            const vignette = this.ctx.createRadialGradient(
+                this.W / 2, this.H / 2, this.W * 0.3,
+                this.W / 2, this.H / 2, this.W * 0.7
+            );
+            vignette.addColorStop(0, 'rgba(255,0,0,0)');
+            vignette.addColorStop(1, 'rgba(255,0,0,0.15)');
+            this.ctx.fillStyle = vignette;
+            this.ctx.fillRect(0, 0, this.W, this.H);
+
+            // "YOU ARE IT" banner
+            this.ctx.fillStyle = 'rgba(255, 68, 102, 0.9)';
+            this.ctx.font = 'bold 24px Inter, sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeText('👑 YOU ARE IT!', this.W / 2, 80);
+            this.ctx.fillText('👑 YOU ARE IT!', this.W / 2, 80);
+            
+            this.ctx.restore();
+        } else if (itPlayer) {
+            // Show arrow pointing to IT player if they're far away
+            const dx = itPlayer.x - player.x;
+            const dy = itPlayer.y - player.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist > 400) {
+                const angle = Math.atan2(dy, dx);
+                const arrowDist = Math.min(150, this.W * 0.25);
+                const arrowX = this.W / 2 + Math.cos(angle) * arrowDist;
+                const arrowY = this.H / 2 + Math.sin(angle) * arrowDist;
+
+                this.ctx.save();
+                this.ctx.translate(arrowX, arrowY);
+                this.ctx.rotate(angle);
+
+                // Danger arrow
+                this.ctx.fillStyle = 'rgba(255, 68, 102, 0.85)';
+                this.ctx.beginPath();
+                this.ctx.moveTo(20, 0);
+                this.ctx.lineTo(-10, 10);
+                this.ctx.lineTo(-10, -10);
+                this.ctx.closePath();
+                this.ctx.fill();
+
+                this.ctx.restore();
+
+                // Distance
+                this.ctx.font = '12px Inter, sans-serif';
+                this.ctx.fillStyle = 'rgba(255, 68, 102, 0.9)';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(`⚠️ ${Math.round(dist)}`, arrowX, arrowY + 25);
+            }
+        }
+
+        // Survival time display (shown in HUD, but we can add screen effect)
+        if (!isIt && tagState.survivalTime > 0) {
+            // Safe glow effect (green edge)
+            const safeTime = tagState.survivalTime;
+            const pulseIntensity = Math.sin(safeTime * 2) * 0.02 + 0.05;
+            
+            const safeGlow = this.ctx.createRadialGradient(
+                this.W / 2, this.H / 2, this.W * 0.4,
+                this.W / 2, this.H / 2, this.W * 0.7
+            );
+            safeGlow.addColorStop(0, 'rgba(68,255,136,0)');
+            safeGlow.addColorStop(1, `rgba(68,255,136,${pulseIntensity})`);
+            this.ctx.fillStyle = safeGlow;
+            this.ctx.fillRect(0, 0, this.W, this.H);
+        }
+    }
+
+    /**
+     * Render boost effect when player has active speed boost
+     */
+    renderBoostEffect(player: Player, boostAmount: number): void {
+        if (boostAmount <= 0) return;
+
+        // Speed lines radiating from player
+        const lineCount = 8;
+        const time = Date.now() / 100;
+        
+        this.ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < lineCount; i++) {
+            const angle = (i / lineCount) * Math.PI * 2 + time * 0.1;
+            const len = 40 + Math.sin(time + i) * 20;
+            const startDist = player.halo + 5;
+            
+            const x1 = player.x + Math.cos(angle) * startDist;
+            const y1 = player.y + Math.sin(angle) * startDist;
+            const x2 = player.x + Math.cos(angle) * (startDist + len);
+            const y2 = player.y + Math.sin(angle) * (startDist + len);
+            
+            const gradient = this.ctx.createLinearGradient(x1, y1, x2, y2);
+            gradient.addColorStop(0, `rgba(255, 215, 0, ${boostAmount * 0.6})`);
+            gradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+            
+            this.ctx.strokeStyle = gradient;
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(x1, y1);
+            this.ctx.lineTo(x2, y2);
+            this.ctx.stroke();
+        }
+        this.ctx.globalCompositeOperation = 'source-over';
     }
 }

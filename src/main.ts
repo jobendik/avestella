@@ -9,8 +9,8 @@ import { WebSocketClient } from './network/WebSocketClient';
 import { EventBus } from './systems/EventBus';
 import { VoiceChat } from './core/voice';
 import { PersistenceManager } from './core/persistence';
-import { Star, Echo, Projectile, Particle, FloatingText } from './game/entities';
-import type { Player, Camera, Settings, GameState, OtherPlayer, Stats, DailyProgress, WeeklyProgress } from './types';
+import { Star, Echo, Projectile, Particle, FloatingText, PowerUp } from './game/entities';
+import type { Player, Camera, Settings, GameState, OtherPlayer, Stats, DailyProgress, WeeklyProgress, TagGameState, PowerUpType } from './types';
 
 // Initialize game state
 const settings: Settings = {
@@ -35,7 +35,11 @@ const gameState: GameState = {
     directTarget: null,
     currentRealm: 'genesis',
     voiceOn: false,
-    isSpeaking: false
+    isSpeaking: false,
+    boost: 0,
+    boostType: null,
+    tagGame: { active: false, itPlayerId: null, survivalTime: 0, lastTagTime: 0 },
+    friends: []
 };
 
 // Track when we received initial player data vs XP gains (for race condition fix)
@@ -120,14 +124,39 @@ const particles: Particle[] = [];
 const floats: FloatingText[] = [];
 const constellations: [Star, Star, Star][] = [];
 
-// Initialize player with Campfire Model spawn
-const spawnAngle = Math.random() * Math.PI * 2;
-const spawnDist = Math.random() * CONFIG.SPAWN_RADIUS;
+// === NEW: PowerUp & Tag Game Systems (insp.html inspired) ===
+const powerups: PowerUp[] = [];
+let tagGameState: TagGameState = { active: false, itPlayerId: null, survivalTime: 0, lastTagTime: 0 };
+let boostActive = false;
+let boostType: PowerUpType | null = null;
+let boostEndTime = 0;
+let powerupSpawnTimer = 0;
+
+// === Seed-based Spawning (inspiration4) ===
+// Parse URL for seed parameter to spawn near invited location
+const urlParams = new URLSearchParams(window.location.search);
+const seedOrbit = urlParams.get('seed');
+let spawnX: number, spawnY: number;
+
+if (seedOrbit) {
+    // Decode seed to coordinates (same encoding as invitation)
+    const seedNum = parseInt(seedOrbit, 10) || 0;
+    spawnX = seedNum % 10000;
+    spawnY = Math.floor(seedNum / 10000);
+    console.log(`🔗 Spawning from orbit invite at (${spawnX}, ${spawnY})`);
+} else {
+    // Normal Campfire Model spawn
+    const spawnAngle = Math.random() * Math.PI * 2;
+    const spawnDist = Math.random() * CONFIG.SPAWN_RADIUS;
+    spawnX = Math.cos(spawnAngle) * spawnDist;
+    spawnY = Math.sin(spawnAngle) * spawnDist;
+}
+
 const player: Player = {
-    x: Math.cos(spawnAngle) * spawnDist,
-    y: Math.sin(spawnAngle) * spawnDist,
-    tx: Math.cos(spawnAngle) * spawnDist,
-    ty: Math.sin(spawnAngle) * spawnDist,
+    x: spawnX,
+    y: spawnY,
+    tx: spawnX,
+    ty: spawnY,
     hue: settings.hue || Math.random() * 360,  // Use saved hue if available
     xp: stats.level ? CONFIG.LEVEL_XP[stats.level - 1] || 0 : 0,  // Restore XP from level
     stars: stats.stars || 0,
@@ -233,6 +262,21 @@ function setupUI(): void {
         closeAllPanels();
         gameState.showingSettings = true;
         document.getElementById('settings')?.classList.add('show');
+    });
+
+    // === NEW: Snapshot button ===
+    document.getElementById('btn-snapshot')?.addEventListener('click', takeSnapshot);
+
+    // === NEW: Snapshot modal controls ===
+    document.getElementById('snapshot-download')?.addEventListener('click', downloadSnapshot);
+    document.getElementById('snapshot-close')?.addEventListener('click', closeSnapshotModal);
+
+    // === NEW: Quick reactions bar ===
+    document.querySelectorAll('.react-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const emoji = (btn as HTMLElement).dataset.emoji;
+            if (emoji) sendQuickReaction(emoji);
+        });
     });
 
     // Panel close buttons
@@ -362,6 +406,28 @@ function setupUI(): void {
             UIManager.hideMessageBox();
             gameState.msgMode = null;
             gameState.directTarget = null;
+        }
+    });
+
+    // Quick chat input (inspiration4.html style - always visible at bottom)
+    const quickChat = document.getElementById('quick-chat') as HTMLInputElement;
+    quickChat?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && quickChat.value.trim()) {
+            const text = quickChat.value.trim();
+            createWhisper(text);
+            quickChat.value = '';
+            quickChat.blur();
+        } else if (e.key === 'Escape') {
+            quickChat.value = '';
+            quickChat.blur();
+        }
+    });
+
+    // Focus quick chat when pressing Enter anywhere (if not already focused on input)
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !gameState.msgMode && document.activeElement !== msgInput && document.activeElement !== quickChat) {
+            e.preventDefault();
+            quickChat?.focus();
         }
     });
 
@@ -503,7 +569,11 @@ function setupUI(): void {
 
         if (clicked) {
             gameState.selectedId = clicked;
-            UIManager.showProfile(others.get(clicked)!, e.clientX, e.clientY);
+            const clickedPlayer = others.get(clicked)!;
+            UIManager.showProfile(clickedPlayer, e.clientX, e.clientY);
+            
+            // Also show the inspiration4-style click profile card
+            showClickProfileCard(clickedPlayer, e.clientX, e.clientY);
             // Don't move when clicking on players/bots
             e.stopPropagation();
         } else {
@@ -561,14 +631,26 @@ function handleMouseMove(e: MouseEvent): void {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
+    const worldX = camera.x + mx;
+    const worldY = camera.y + my;
 
     // Only update movement target if mouse is held down
     if (isMouseDown) {
-        const worldX = camera.x + mx;
-        const worldY = camera.y + my;
         player.tx = worldX;
         player.ty = worldY;
     }
+    
+    // Hover tooltip - show preview when hovering over players/bots
+    let hoveredPlayer: OtherPlayer | null = null;
+    for (const [, other] of others) {
+        const dist = Math.hypot(other.x - worldX, other.y - worldY);
+        if (dist < other.halo) {
+            hoveredPlayer = other;
+            break;
+        }
+    }
+    
+    updateHoverTooltip(hoveredPlayer, e.clientX, e.clientY);
 }
 
 function handleMouseUp(): void {
@@ -654,7 +736,8 @@ function changeRealm(realmId: string): void {
         abyss: { icon: '🕳️', name: 'The Abyss' },
         crystal: { icon: '💎', name: 'Crystal Caverns' },
         sanctuary: { icon: '🏛️', name: 'Sanctuary' },
-        celestial: { icon: '👑', name: 'Celestial Throne' }
+        celestial: { icon: '👑', name: 'Celestial Throne' },
+        tagarena: { icon: '🏃', name: 'Tag Arena' }
     };
 
     const realm = realmData[realmId];
@@ -680,6 +763,13 @@ function changeRealm(realmId: string): void {
                 checkAchievements();
             }
 
+            // === Handle Tag Arena special mode ===
+            if (realmId === 'tagarena') {
+                startTagGame();
+            } else {
+                endTagGame();
+            }
+
             // Disconnect all voice peers from old realm to prevent orphaned connections
             if (voiceChat.enabled) {
                 for (const peerId of voiceChat.getConnectedPeers()) {
@@ -687,8 +777,9 @@ function changeRealm(realmId: string): void {
                 }
             }
 
-            // Clear other players and stars from old realm
+            // Clear other players, stars, and powerups from old realm
             others.clear();
+            powerups.length = 0;
 
             setTimeout(() => {
                 trans.classList.remove('active');
@@ -701,6 +792,9 @@ function createEcho(text: string): void {
     // 100% Server-authoritative: Only send request, effects happen on broadcast
     if (wsClient.isConnected()) {
         wsClient.sendEcho(player, text);
+        
+        // Message recoil (inspiration3) - nudge player backward
+        applyMessageRecoil();
     } else {
         // No connection - warn user, don't apply local effects
         UIManager.toast('⚠️ Not connected - echo not sent', 'warning');
@@ -718,9 +812,13 @@ function createWhisper(text: string, targetId?: string): void {
             if (target) {
                 floats.push(new FloatingText(target.x, target.y - target.halo - 25, `💬 ${text}`, 90, 12));
                 UIManager.toast(`Whispered to ${target.name}`);
+                // Message recoil toward target (inspiration3)
+                applyMessageRecoil(target.x, target.y);
             }
         } else {
             floats.push(new FloatingText(player.x, player.y - player.halo - 25, `💬 ${text}`, 90, 12));
+            // Random recoil for broadcast
+            applyMessageRecoil();
         }
         audio.playWhisperSend();
     } else {
@@ -812,6 +910,199 @@ function doEmote(emote: string): void {
     }
 }
 
+// === Click Profile Card (inspiration4 style) ===
+let currentClickProfileTarget: OtherPlayer | null = null;
+
+function showClickProfileCard(other: OtherPlayer, screenX: number, screenY: number): void {
+    const card = document.getElementById('click-profile-card');
+    if (!card) return;
+    
+    currentClickProfileTarget = other;
+    
+    // Update card content
+    const dot = document.getElementById('cpc-dot');
+    const name = document.getElementById('cpc-name');
+    const age = document.getElementById('cpc-age');
+    const stars = document.getElementById('cpc-stars');
+    const bond = document.getElementById('cpc-bond');
+    
+    if (dot) {
+        dot.style.backgroundColor = `hsl(${other.hue}, 70%, 60%)`;
+        dot.style.boxShadow = `0 0 10px hsla(${other.hue}, 70%, 60%, 0.6)`;
+    }
+    if (name) name.textContent = other.name;
+    if (age) {
+        const mins = Math.floor((Date.now() - (other.born || Date.now())) / 60000);
+        age.textContent = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h`;
+    }
+    if (stars) stars.textContent = (other.stars || 0).toString();
+    if (bond) bond.textContent = `${Math.round(other.bondToViewer || 0)}%`;
+    
+    // Update additional fields
+    const level = document.getElementById('cpc-level');
+    const xp = document.getElementById('cpc-xp');
+    if (level) level.textContent = `Lv ${GameLogic.getLevel(other.xp || 0)}`;
+    if (xp) xp.textContent = (other.xp || 0).toString();
+    
+    // Update friend button text based on friend status
+    const friendBtn = document.getElementById('cpc-friend');
+    if (friendBtn) {
+        const isFriend = gameState.friends.some(f => f.id === other.id);
+        friendBtn.textContent = isFriend ? '✓ Friends' : '⭐ Add Friend';
+        (friendBtn as HTMLButtonElement).disabled = isFriend;
+    }
+    
+    // Position card
+    card.style.left = `${screenX}px`;
+    card.style.top = `${screenY}px`;
+    card.classList.add('active');
+}
+
+function hideClickProfileCard(): void {
+    const card = document.getElementById('click-profile-card');
+    if (card) card.classList.remove('active');
+    currentClickProfileTarget = null;
+}
+
+// Hover tooltip - quick preview
+let _hoverTooltipVisible = false;
+
+function updateHoverTooltip(other: OtherPlayer | null, screenX: number, screenY: number): void {
+    const tooltip = document.getElementById('hover-tooltip');
+    if (!tooltip) return;
+    
+    // Don't show tooltip if click profile card is open
+    if (currentClickProfileTarget) {
+        tooltip.classList.remove('visible');
+        return;
+    }
+    
+    if (other) {
+        const dot = document.getElementById('ht-dot');
+        const name = document.getElementById('ht-name');
+        const level = document.getElementById('ht-level');
+        
+        if (dot) {
+            dot.style.backgroundColor = `hsl(${other.hue}, 70%, 60%)`;
+            dot.style.boxShadow = `0 0 6px hsla(${other.hue}, 70%, 60%, 0.6)`;
+        }
+        if (name) name.textContent = other.name;
+        if (level) level.textContent = `Lv ${GameLogic.getLevel(other.xp || 0)}`;
+        
+        tooltip.style.left = `${screenX}px`;
+        tooltip.style.top = `${screenY - 10}px`;
+        tooltip.classList.add('visible');
+        hoverTooltipVisible = true;
+        
+        // Change cursor to pointer
+        canvas.style.cursor = 'pointer';
+    } else {
+        tooltip.classList.remove('visible');
+        hoverTooltipVisible = false;
+        canvas.style.cursor = 'default';
+    }
+}
+
+// Click profile card button handlers
+document.getElementById('cpc-whisper')?.addEventListener('click', () => {
+    if (currentClickProfileTarget) {
+        gameState.selectedId = currentClickProfileTarget.id;
+        gameState.msgMode = 'whisper';
+        UIManager.showMessageBox(`Whisper to ${currentClickProfileTarget.name}...`);
+        hideClickProfileCard();
+    }
+});
+
+document.getElementById('cpc-friend')?.addEventListener('click', () => {
+    if (currentClickProfileTarget) {
+        if (wsClient.isConnected()) {
+            wsClient.addFriend(currentClickProfileTarget.id, currentClickProfileTarget.name);
+            UIManager.toast(`⭐ Added ${currentClickProfileTarget.name} as friend!`, 'success');
+        } else {
+            UIManager.toast('⚠️ Not connected', 'warning');
+        }
+        hideClickProfileCard();
+    }
+});
+
+document.getElementById('cpc-invite')?.addEventListener('click', () => {
+    // Generate invite URL based on current player position
+    const seedVal = Math.floor(player.x) + Math.floor(player.y) * 10000;
+    const url = `${window.location.origin}${window.location.pathname}?seed=${seedVal}`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(url).then(() => {
+        showInviteToast();
+    }).catch(() => {
+        // Fallback
+        prompt('Copy your orbit link:', url);
+    });
+    
+    hideClickProfileCard();
+});
+
+// Close card when clicking elsewhere
+document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('#click-profile-card') && !target.closest('#cosmos')) {
+        hideClickProfileCard();
+    }
+});
+
+// === Invite Toast (inspiration4) ===
+function showInviteToast(): void {
+    const toast = document.getElementById('invite-toast');
+    if (toast) {
+        toast.classList.add('visible');
+        setTimeout(() => toast.classList.remove('visible'), 2500);
+    }
+}
+
+// === Hint Pill Fade (inspiration4) ===
+let hintPillDismissed = false;
+
+function fadeHintPill(): void {
+    if (hintPillDismissed) return;
+    hintPillDismissed = true;
+    const pill = document.getElementById('hint-pill');
+    if (pill) pill.classList.add('fade-out');
+}
+
+// Signal strength HUD (inspiration3) - shows latency
+function updateSignalHUD(latency: number, connected: boolean): void {
+    const valEl = document.getElementById('signal-val');
+    if (!valEl) return;
+    
+    if (!connected) {
+        valEl.textContent = 'OFFLINE';
+        valEl.className = 'disconnected';
+        return;
+    }
+    
+    // Convert latency to "signal strength" percentage
+    // 0ms = 100%, 500ms+ = 0%
+    const strength = Math.max(0, Math.min(100, Math.round(100 - (latency / 5))));
+    valEl.textContent = `${strength}%`;
+    
+    // Color based on quality
+    if (strength >= 70) {
+        valEl.className = '';  // Default accent color (good)
+    } else if (strength >= 40) {
+        valEl.className = 'weak';  // Yellow (moderate)
+    } else {
+        valEl.className = 'disconnected';  // Red (poor)
+    }
+}
+
+// Dismiss hint on first interaction
+canvas.addEventListener('mousedown', fadeHintPill, { once: true });
+canvas.addEventListener('touchstart', fadeHintPill, { once: true });
+document.addEventListener('keydown', (e) => {
+    if (['w', 'a', 's', 'd', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        fadeHintPill();
+    }
+}, { once: true });
+
 function doSing(): void {
     // 100% Server-authoritative: Only send request, effects happen on broadcast
     if (wsClient.isConnected()) {
@@ -868,7 +1159,19 @@ function applyPulseEffect(playerId: string, x: number, y: number): void {
         if (settings.shake) camera.shake = 0.5;
         // Server handles stats and XP
 
-        // Light stars for local player
+        // === Graph-based star ignition (inspiration4) ===
+        // Stars require 2+ connected players nearby to ignite
+        const IGNITION_DIST = 120;  // Distance to be "near" a star
+        const TETHER_DIST = 220;    // Distance for players to be "connected"
+        
+        // Find all nearby players (including bots) within tether range
+        const nearbyOthers = Array.from(others.values()).filter(o => 
+            Math.hypot(o.x - player.x, o.y - player.y) <= TETHER_DIST
+        );
+        
+        // Light stars if there's at least 1 nearby connected player (2 total including self)
+        const hasConnection = nearbyOthers.length >= 1;
+        
         const viewRadius = GameLogic.getViewRadius(player);
         let lit = 0;
         const litStarIds: string[] = [];
@@ -876,8 +1179,29 @@ function applyPulseEffect(playerId: string, x: number, y: number): void {
         for (const [k, arr] of stars) {
             if (!k.startsWith(gameState.currentRealm + ':')) continue;
             for (const s of arr) {
-                const dist = Math.hypot(s.x - x, s.y - y);
-                if (dist < viewRadius * 1.8 && !s.lit) {
+                if (s.lit) continue;
+                
+                const distToStar = Math.hypot(s.x - x, s.y - y);
+                
+                // Star must be within pulse range
+                if (distToStar >= viewRadius * 1.8) continue;
+                
+                // === Graph ignition check ===
+                // Count how many players (including self) are near this star AND connected
+                let playersNearStar = distToStar < IGNITION_DIST ? 1 : 0; // Self
+                
+                for (const other of nearbyOthers) {
+                    const otherDistToStar = Math.hypot(s.x - other.x, s.y - other.y);
+                    if (otherDistToStar < IGNITION_DIST) {
+                        playersNearStar++;
+                    }
+                }
+                
+                // Require 2+ connected players near the star to ignite
+                // OR allow solo ignition if no one is nearby at all (for solo play)
+                const canIgnite = playersNearStar >= 2 || (!hasConnection && playersNearStar >= 1);
+                
+                if (canIgnite) {
                     s.lit = true;
                     s.burst = 1;
                     lit++;
@@ -936,6 +1260,49 @@ function applyEmoteEffect(playerId: string, emoji: string, x: number, y: number)
     floats.push(new FloatingText(x, y - halo - 35, emoji, 80, 22));
 }
 
+// Message recoil (inspiration3) - nudge player opposite to message direction
+function applyMessageRecoil(targetX?: number, targetY?: number): void {
+    const RECOIL_FORCE = 8;
+    let dx: number, dy: number;
+    
+    if (targetX !== undefined && targetY !== undefined) {
+        // Recoil away from target
+        const dist = Math.hypot(targetX - player.x, targetY - player.y);
+        if (dist > 0) {
+            dx = -(targetX - player.x) / dist;
+            dy = -(targetY - player.y) / dist;
+        } else {
+            dx = 0;
+            dy = -1;
+        }
+    } else {
+        // Find nearest other player and recoil away from them
+        let nearest: { x: number; y: number } | null = null;
+        let minDist = Infinity;
+        for (const other of others.values()) {
+            const d = Math.hypot(other.x - player.x, other.y - player.y);
+            if (d < minDist) {
+                minDist = d;
+                nearest = other;
+            }
+        }
+        
+        if (nearest && minDist < 500) {
+            dx = -(nearest.x - player.x) / minDist;
+            dy = -(nearest.y - player.y) / minDist;
+        } else {
+            // Random direction if no one nearby
+            const angle = Math.random() * Math.PI * 2;
+            dx = Math.cos(angle);
+            dy = Math.sin(angle);
+        }
+    }
+    
+    // Apply recoil to target position
+    player.tx += dx * RECOIL_FORCE;
+    player.ty += dy * RECOIL_FORCE;
+}
+
 function applyEchoEffect(playerId: string, text: string, x: number, y: number, hue: number, playerName: string, echoId: string, ignited: number = 0): void {
     const isSelf = playerId === player.id;
 
@@ -956,7 +1323,7 @@ function gainXP(amount: number): void {
     player.xp += amount;
     const newLevel = GameLogic.getLevel(player.xp);
 
-    floats.push(new FloatingText(player.x, player.y - player.halo - 25, `+${amount} XP`, 50, 13));
+    floats.push(new FloatingText(player.x, player.y - player.halo - 55, `+${amount} XP`, 50, 13));
 
     if (newLevel > oldLevel) {
         audio.playLevelUp();
@@ -1096,12 +1463,24 @@ function setupNetworkEventListeners(): void {
     });
 
     EventBus.on('network:whisper', (data) => {
-        // Show incoming whisper
+        // Show incoming whisper as toast
         UIManager.toast(`💬 ${data.fromName}: ${data.text}`, 'whisper');
         audio.playWhisperRecv();
+        audio.playChatChime();  // Play chat chime (inspiration4)
 
         // Show floating text at sender position
         floats.push(new FloatingText(data.x, data.y - 50, `💬 ${data.text}`, 90, 12));
+
+        // Add chat bubble to the sender (so we see what they said near their avatar)
+        const sender = others.get(data.from);
+        if (sender) {
+            sender.message = data.text;
+            sender.messageTimer = 180;  // ~3 seconds
+            sender.messageYOffset = 0;  // Start at baseline, will float up
+            // Apply chat heat (inspiration4) - makes sender's color shift warmer
+            sender.chatHeat = 1.0;
+            if (sender.baseHue === undefined) sender.baseHue = sender.hue;
+        }
     });
 
     EventBus.on('network:starLit', (data) => {
@@ -1176,6 +1555,10 @@ function setupNetworkEventListeners(): void {
                 // Bot message system
                 existing.message = entity.message || undefined;
                 existing.messageTimer = entity.messageTimer || undefined;
+                // Voice speaking state from server
+                if (entity.speaking !== undefined) {
+                    existing.speaking = entity.speaking;
+                }
                 // Update bond strength from server
                 if (entity.bondToViewer !== undefined) {
                     existing.bondToViewer = entity.bondToViewer;
@@ -1199,7 +1582,7 @@ function setupNetworkEventListeners(): void {
                     emoteT: 0,
                     trail: [],
                     born: entity.born || Date.now(),
-                    speaking: false,
+                    speaking: entity.speaking || false,
                     isBot: entity.isBot || false,
                     // Bot message system
                     message: entity.message,
@@ -1236,14 +1619,21 @@ function setupNetworkEventListeners(): void {
     // Connection status
     EventBus.on('network:connected', () => {
         UIManager.toast('🔌 Connected to server', 'success');
+        updateSignalHUD(0, true);
     });
 
     EventBus.on('network:disconnected', () => {
         UIManager.toast('⚠️ Disconnected from server', 'warning');
+        updateSignalHUD(0, false);
     });
 
     EventBus.on('network:error', ({ error }) => {
         console.error('Network error:', error);
+    });
+
+    // Signal strength (inspiration3) - latency indicator
+    EventBus.on('network:latency', (data: { latency: number }) => {
+        updateSignalHUD(data.latency, true);
     });
 
     // === SERVER-AUTHORITATIVE PLAYER DATA ===
@@ -1320,7 +1710,7 @@ function setupNetworkEventListeners(): void {
         player.xp = newXp;
 
         // Show XP gain floating text
-        floats.push(new FloatingText(player.x, player.y - player.halo - 25, `+${amount} XP`, 50, 13));
+        floats.push(new FloatingText(player.x, player.y - player.halo - 55, `+${amount} XP`, 50, 13));
 
         // Update action stats based on reason
         if (reason === 'sing') stats.sings++;
@@ -1397,6 +1787,203 @@ function setupNetworkEventListeners(): void {
     });
 }
 
+// === NEW FEATURE HELPERS (insp.html inspired) ===
+
+/**
+ * Apply collected power-up effect
+ */
+function applyPowerUp(powerup: PowerUp): void {
+    camera.shake = CONFIG.SHAKE_POWERUP;
+    audio.playSound('collect');
+
+    switch (powerup.type) {
+        case 'speed':
+            boostActive = true;
+            boostType = 'speed';
+            boostEndTime = Date.now() + CONFIG.BOOST_DURATION * 1000;
+            UIManager.toast('⚡ Speed Boost!', 'success');
+            showBoostIndicator('speed');
+            break;
+
+        case 'xp':
+            // Add XP bonus (server handles actual XP)
+            player.xp += CONFIG.POWERUP_XP_BONUS;
+            UIManager.toast(`✨ +${CONFIG.POWERUP_XP_BONUS} XP!`, 'success');
+            floats.push(new FloatingText(player.x, player.y - 30, `+${CONFIG.POWERUP_XP_BONUS} XP`, player.hue));
+            break;
+
+        case 'shield':
+            boostActive = true;
+            boostType = 'shield';
+            boostEndTime = Date.now() + CONFIG.BOOST_DURATION * 1000;
+            UIManager.toast('🛡️ Shield Active!', 'success');
+            showBoostIndicator('shield');
+            break;
+
+        case 'magnet':
+            boostActive = true;
+            boostType = 'magnet';
+            boostEndTime = Date.now() + CONFIG.BOOST_DURATION * 1000;
+            UIManager.toast('🧲 Star Magnet!', 'success');
+            showBoostIndicator('magnet');
+            break;
+    }
+
+    // Particles - use a hue value based on powerup type
+    if (settings.particles) {
+        const hueMap: Record<PowerUpType, number> = {
+            speed: 55,    // Yellow/gold
+            xp: 270,      // Purple
+            shield: 200,  // Cyan
+            magnet: 120   // Green
+        };
+        GameLogic.spawnParticles(powerup.x, powerup.y, hueMap[powerup.type], 15, true, particles);
+    }
+}
+
+/**
+ * Show boost indicator UI
+ */
+function showBoostIndicator(type: PowerUpType): void {
+    const indicator = document.getElementById('boost-indicator');
+    const icon = document.getElementById('boost-icon');
+    const name = document.getElementById('boost-name');
+
+    if (!indicator || !icon || !name) return;
+
+    const icons: Record<PowerUpType, string> = {
+        speed: '⚡',
+        xp: '✨',
+        shield: '🛡️',
+        magnet: '🧲'
+    };
+
+    const names: Record<PowerUpType, string> = {
+        speed: 'Speed Boost',
+        xp: 'XP Boost',
+        shield: 'Shield',
+        magnet: 'Star Magnet'
+    };
+
+    icon.textContent = icons[type];
+    name.textContent = names[type];
+    indicator.classList.add('active');
+}
+
+/**
+ * Start tag game mode
+ */
+function startTagGame(): void {
+    tagGameState = GameLogic.initTagGame(others, player.id);
+    UIManager.toast("🏃 Tag Game Started! Don't get caught!", 'info');
+    updateTagHUD();
+    document.getElementById('tag-hud')?.classList.add('active');
+}
+
+/**
+ * End tag game mode
+ */
+function endTagGame(): void {
+    if (tagGameState.active) {
+        tagGameState.active = false;
+        document.getElementById('tag-hud')?.classList.remove('active');
+    }
+}
+
+/**
+ * Update tag game HUD
+ */
+function updateTagHUD(): void {
+    const itName = document.getElementById('it-name');
+    const survivalTime = document.getElementById('survival-time');
+
+    if (!itName || !survivalTime) return;
+
+    const isPlayerIt = tagGameState.itPlayerId === player.id;
+
+    if (isPlayerIt) {
+        itName.textContent = 'YOU are IT!';
+        itName.style.color = '#ff4757';
+    } else {
+        const itPlayer = others.get(tagGameState.itPlayerId || '');
+        itName.textContent = itPlayer?.name || 'Unknown';
+        itName.style.color = '#ffd93d';
+    }
+
+    survivalTime.textContent = `${Math.floor(tagGameState.survivalTime)}s`;
+}
+
+/**
+ * Take a snapshot of the current view
+ */
+function takeSnapshot(): void {
+    // Create a temporary canvas with the current game state
+    const snapshotCanvas = document.createElement('canvas');
+    snapshotCanvas.width = canvas.width;
+    snapshotCanvas.height = canvas.height;
+    const ctx = snapshotCanvas.getContext('2d')!;
+
+    // Copy current canvas
+    ctx.drawImage(canvas, 0, 0);
+
+    // Add watermark
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '14px system-ui';
+    ctx.fillText(`AURA • ${player.name} • ${new Date().toLocaleDateString()}`, 10, canvas.height - 10);
+
+    // Show in modal
+    const modal = document.getElementById('snapshot-modal');
+    const preview = document.getElementById('snapshot-preview') as HTMLImageElement;
+
+    if (modal && preview) {
+        preview.src = snapshotCanvas.toDataURL('image/png');
+        modal.classList.add('active');
+    }
+
+    camera.shake = CONFIG.SHAKE_SNAPSHOT;
+    UIManager.toast('📸 Snapshot taken!');
+}
+
+/**
+ * Download the current snapshot
+ */
+function downloadSnapshot(): void {
+    const preview = document.getElementById('snapshot-preview') as HTMLImageElement;
+    if (!preview || !preview.src) return;
+
+    const link = document.createElement('a');
+    link.download = `aura-snapshot-${Date.now()}.png`;
+    link.href = preview.src;
+    link.click();
+}
+
+/**
+ * Close snapshot modal
+ */
+function closeSnapshotModal(): void {
+    document.getElementById('snapshot-modal')?.classList.remove('active');
+}
+
+/**
+ * Send a quick reaction emoji
+ */
+function sendQuickReaction(emoji: string): void {
+    // Show floating reaction above player
+    floats.push(new FloatingText(player.x, player.y - 40, emoji, player.hue));
+
+    // Also broadcast as emote
+    if (wsClient.isConnected()) {
+        wsClient.sendEmote(player, emoji);
+    }
+
+    // Update stats
+    stats.emotes++;
+    dailyProgress.emotes++;
+    PersistenceManager.saveDailyProgress(dailyProgress);
+
+    camera.shake = CONFIG.SHAKE_REACTION;
+}
+
 function startGame(): void {
     console.log('🌌 AURA - The Social Cosmos initialized (Server-Authoritative)');
     console.log('Player:', player.name, 'ID:', player.id);
@@ -1443,12 +2030,68 @@ function startGame(): void {
 
 function update(): void {
     if (!gameState.gameActive) return;
+    const dt = 0.016; // ~60fps
 
-    // Update player movement
+    // === Get realm physics ===
+    const physics = GameLogic.getRealmPhysics(gameState.currentRealm);
+    const boostMultiplier = boostActive && boostType === 'speed' ? CONFIG.BOOST_SPEED_MULTIPLIER : 1.0;
+    const driftSpeed = CONFIG.DRIFT * physics.driftMultiplier * boostMultiplier;
+
+    // Update player movement with realm physics
     const oldX = player.x;
     const oldY = player.y;
-    player.x += (player.tx - player.x) * CONFIG.DRIFT;
-    player.y += (player.ty - player.y) * CONFIG.DRIFT;
+    player.x += (player.tx - player.x) * driftSpeed;
+    player.y += (player.ty - player.y) * driftSpeed;
+
+    // Apply realm gravity
+    if (physics.gravity.x !== 0 || physics.gravity.y !== 0) {
+        player.tx += physics.gravity.x * 0.5;
+        player.ty += physics.gravity.y * 0.5;
+    }
+
+    // === Update boost timer ===
+    if (boostActive && Date.now() > boostEndTime) {
+        boostActive = false;
+        boostType = null;
+        document.getElementById('boost-indicator')?.classList.remove('active');
+    }
+
+    // === Power-up spawning ===
+    powerupSpawnTimer += dt;
+    if (powerupSpawnTimer >= CONFIG.POWERUP_SPAWN_INTERVAL) {
+        powerupSpawnTimer = 0;
+        GameLogic.spawnPowerUp(player, gameState.currentRealm, powerups);
+    }
+
+    // === Update power-ups ===
+    GameLogic.updatePowerUps(powerups, dt);
+
+    // === Check power-up collection ===
+    const collected = GameLogic.checkPowerUpCollection(player, powerups, gameState.currentRealm);
+    if (collected) {
+        applyPowerUp(collected);
+    }
+
+    // === Tag game logic (only in Tag Arena) ===
+    if (gameState.currentRealm === 'tagarena' && tagGameState.active) {
+        tagGameState.survivalTime += dt;
+
+        const tagResult = GameLogic.checkTagCollision(player, others, tagGameState);
+        if (tagResult.tagged && tagResult.newItId) {
+            tagGameState.itPlayerId = tagResult.newItId;
+            tagGameState.lastTagTime = Date.now();
+            camera.shake = CONFIG.SHAKE_TAG;
+            audio.playSound('tag');
+
+            if (tagResult.newItId === player.id) {
+                UIManager.toast("You're IT! 🏃", 'warning');
+            } else {
+                UIManager.toast("Tagged! You're free!", 'success');
+            }
+
+            updateTagHUD();
+        }
+    }
 
     // Update trail (decay faster when far from center - Campfire Model)
     if (Math.hypot(player.x - oldX, player.y - oldY) > 1.5) {
@@ -1490,7 +2133,34 @@ function update(): void {
             other.emoteT -= 0.016;
             if (other.emoteT <= 0) other.emoting = null;
         }
+        // Decay chat message timer (for chat bubbles)
+        if (other.messageTimer !== undefined && other.messageTimer > 0) {
+            other.messageTimer -= 1;
+            // Floating bubble: slowly rise (offset becomes more negative)
+            if (other.messageYOffset !== undefined) {
+                other.messageYOffset -= 0.15;  // Float upward ~0.15px/frame
+            }
+            if (other.messageTimer <= 0) {
+                other.message = undefined;
+                other.messageYOffset = undefined;
+            }
+        }
+        // Decay chat heat (inspiration4) - warm color fades back to base
+        if (other.chatHeat !== undefined && other.chatHeat > 0) {
+            other.chatHeat = Math.max(0, other.chatHeat - 0.008); // ~2 sec fade
+            // Interpolate hue toward warmer (shift by up to +50)
+            if (other.baseHue !== undefined) {
+                other.hue = other.baseHue + (other.chatHeat * 50);
+                if (other.hue > 360) other.hue -= 360;
+            }
+        }
     }
+
+    // Update ambient drone based on nearby count (inspiration4)
+    const nearbyCount = Array.from(others.values()).filter(o => 
+        Math.hypot(o.x - player.x, o.y - player.y) < 500
+    ).length;
+    audio.updateDroneProximity(nearbyCount);
 
     // Voice peer discovery - check nearby players for voice connections (throttled)
     voicePeerUpdateCounter++;
@@ -1579,15 +2249,49 @@ function render(): void {
     renderer.renderStars(stars, player, viewRadius, gameState.currentRealm);
     renderer.renderEchoes(echoes, player, viewRadius, gameState.currentRealm);
     renderer.renderConstellations(constellations);
+    renderer.renderSocialClusters(player, others, viewRadius);  // NEW: Social clustering glow
     renderer.renderTethers(player, others);
+    renderer.renderVoiceProximity(player, others, gameState.voiceOn, 500, voiceChat.getConnectedPeers());  // Voice proximity ring
+
+    // === NEW: Render power-ups ===
+    renderer.renderPowerUps(powerups, player, viewRadius);
+
     renderer.renderOthers(others, player, viewRadius);
     // NOTE: Bots are now rendered as part of 'others' - they come from server with isBot=true
     renderer.renderProjectiles(projectiles);
+
+    // === NEW: Render boost effect around player ===
+    if (boostActive && boostType === 'speed') {
+        const boostRemaining = Math.max(0, (boostEndTime - Date.now()) / (CONFIG.BOOST_DURATION * 1000));
+        renderer.renderBoostEffect(player, boostRemaining);
+    }
+
     renderer.renderPlayer(player, gameState.voiceOn, gameState.isSpeaking);
     renderer.renderParticles(particles);
     renderer.renderFloats(floats);
 
+    // === NEW: Render tag overlay if active ===
+    if (tagGameState.active) {
+        renderer.renderTagOverlay(tagGameState, player, others);
+        updateTagHUD();  // Update HUD each frame for survival timer
+    }
+
     renderer.restore();
+
+    // Update cluster HUD with nearby count
+    const nearbyCount = Array.from(others.values()).filter(o => 
+        Math.hypot(o.x - player.x, o.y - player.y) < 400
+    ).length;
+    const clusterHud = document.getElementById('cluster-hud');
+    const clusterCount = document.getElementById('cluster-count');
+    if (clusterHud && clusterCount) {
+        clusterCount.textContent = nearbyCount.toString();
+        if (nearbyCount > 0) {
+            clusterHud.classList.add('visible');
+        } else {
+            clusterHud.classList.remove('visible');
+        }
+    }
 
     // Render UI overlays (screen space)
     renderer.renderCompass(player); // Navigation compass for distant players
@@ -1649,6 +2353,13 @@ async function toggleVoice(): Promise<void> {
             voiceChat.onSpeakingChange = (speaking) => {
                 gameState.isSpeaking = speaking;
                 updateVoiceUI();
+                
+                // Broadcast speaking state to server for other players to see
+                wsClient.send({
+                    type: 'speaking',
+                    data: { speaking },
+                    timestamp: Date.now()
+                });
             };
 
             voiceChat.onVolumeUpdate = (level) => {
