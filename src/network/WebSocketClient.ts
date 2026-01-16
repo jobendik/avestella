@@ -3,7 +3,7 @@ import { EventBus } from '../systems/EventBus';
 import type { Player, RealmId } from '../types';
 
 interface WebSocketMessage {
-    type: 'player_update' | 'player_leave' | 'player_joined' | 'players_list' | 'whisper' | 'sing' | 'pulse' | 'emote' | 'echo' | 'star_lit' | 'pong' | 'error' | 'world_state' | 'connection_made' | 'player_data' | 'xp_gain' | 'friend_added' | 'friend_removed' | 'teleport_success' | 'voice_signal' | 'cooldown';
+    type: 'player_update' | 'player_leave' | 'player_joined' | 'players_list' | 'whisper' | 'sing' | 'pulse' | 'emote' | 'echo' | 'echo_ignite' | 'echo_ignited' | 'star_lit' | 'pong' | 'error' | 'world_state' | 'connection_made' | 'player_data' | 'xp_gain' | 'friend_added' | 'friend_removed' | 'teleport_success' | 'voice_signal' | 'cooldown' | 'add_friend' | 'remove_friend' | 'teleport_to_friend';
     data: any;
     timestamp: number;
 }
@@ -234,6 +234,17 @@ export class WebSocketClient {
     }
 
     /**
+     * Ignite (like) an echo
+     */
+    igniteEcho(echoId: string): void {
+        this.send({
+            type: 'echo_ignite',
+            data: { echoId },
+            timestamp: Date.now()
+        });
+    }
+
+    /**
      * Send star lit event
      */
     sendStarLit(player: Player, starIds: string[]): void {
@@ -388,6 +399,9 @@ export class WebSocketClient {
                     break;
                 case 'echo':
                     this.handleEcho(message.data);
+                    break;
+                case 'echo_ignited':
+                    this.handleEchoIgnited(message.data);
                     break;
                 case 'star_lit':
                     this.handleStarLit(message.data);
@@ -566,6 +580,8 @@ export class WebSocketClient {
             x: data.x,
             y: data.y,
             hue: data.hue,
+            echoId: data.echoId,
+            ignited: data.ignited,
             isSelf: data.playerId === this.playerId
         });
     }
@@ -578,6 +594,14 @@ export class WebSocketClient {
             x: data.x,
             y: data.y,
             isSelf: data.playerId === this.playerId
+        });
+    }
+
+    private handleEchoIgnited(data: any): void {
+        EventBus.emit('network:echoIgnited', {
+            echoId: data.echoId,
+            ignited: data.ignited,
+            ignitedBy: data.ignitedBy
         });
     }
 

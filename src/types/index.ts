@@ -175,6 +175,7 @@ export interface Star {
 }
 
 export interface Echo {
+    id: string; // Added ID for referencing
     x: number;
     y: number;
     text: string;
@@ -183,6 +184,8 @@ export interface Echo {
     r: number;
     pulse: number;
     realm: string;
+    ignited: number; // For "likes" visual
+    playerId: string; // To identify own echoes
 }
 
 export interface Projectile {

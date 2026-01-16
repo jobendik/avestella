@@ -47,7 +47,8 @@ interface EventMap {
     'network:sing': { playerId: string; playerName: string; x: number; y: number; hue: number; isSelf: boolean };
     'network:pulse': { playerId: string; playerName: string; x: number; y: number; isSelf: boolean };
     'network:emote': { playerId: string; playerName: string; emoji: string; x: number; y: number; isSelf: boolean };
-    'network:echo': { playerId: string; playerName: string; text: string; x: number; y: number; hue: number; isSelf: boolean };
+    'network:echo': { playerId: string; playerName: string; text: string; x: number; y: number; hue: number; isSelf: boolean; echoId: string; ignited: number };
+    'network:echoIgnited': { echoId: string; ignited: number; ignitedBy: string };
     'network:whisper': { from: string; fromName: string; text: string; targetId?: string; x: number; y: number };
     'network:starLit': { playerId: string; starIds: string[]; x: number; y: number; isSelf: boolean };
     'network:connectionMade': { player1Id: string; player1Name: string; player2Id: string; player2Name: string; isSelf: boolean };

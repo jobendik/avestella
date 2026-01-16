@@ -138,41 +138,57 @@ export class Renderer {
             if (dist > viewRadius + 180) continue;
 
             const a = Math.max(0, 1 - dist / viewRadius);
-            const ps = 1 + e.pulse * 0.12;
-            const rad = e.r * ps;
 
+            // "Ignited" state (likes) increases size and brightness
+            const ignited = e.ignited || 0;
+            const extraSize = Math.min(20, ignited * 2); // Cap growth
+            const extraGlow = Math.min(0.5, ignited * 0.05);
+
+            // Pulsating effect for "living" stars
+            const ps = 1 + (e.pulse * 0.12) + (Math.sin(Date.now() / 500) * 0.1);
+            const rad = (e.r + extraSize) * ps;
+
+            // DRAW GLOW (Star-like)
             this.ctx.globalCompositeOperation = 'lighter';
-            const g = this.ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, rad * 5.5);
-            g.addColorStop(0, `hsla(${e.hue},72%,58%,${0.55 * a})`);
-            g.addColorStop(0.35, `hsla(${e.hue},68%,48%,${0.18 * a})`);
+            const g = this.ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, rad * 6.5);
+            g.addColorStop(0, `hsla(${e.hue},80%,70%,${(0.6 + extraGlow) * a})`);
+            g.addColorStop(0.3, `hsla(${e.hue},70%,50%,${(0.25 + extraGlow) * a})`);
             g.addColorStop(1, 'rgba(0,0,0,0)');
+
             this.ctx.fillStyle = g;
             this.ctx.beginPath();
-            this.ctx.arc(e.x, e.y, rad * 5.5, 0, Math.PI * 2);
+            this.ctx.arc(e.x, e.y, rad * 6.5, 0, Math.PI * 2);
             this.ctx.fill();
 
+            // DRAW CORE (White hot center)
             this.ctx.globalCompositeOperation = 'source-over';
-            this.ctx.fillStyle = `rgba(255,255,255,${a * 0.88})`;
+            this.ctx.fillStyle = `rgba(255,255,255,${a * 0.95})`;
+            this.ctx.shadowColor = `hsla(${e.hue},80%,60%,1)`;
+            this.ctx.shadowBlur = 10 + extraSize;
             this.ctx.beginPath();
-            this.ctx.arc(e.x, e.y, rad, 0, Math.PI * 2);
+            this.ctx.arc(e.x, e.y, rad * 0.6, 0, Math.PI * 2);
             this.ctx.fill();
+            this.ctx.shadowBlur = 0;
 
-            if (dist < 90) {
+            // Show text only when close (Hover feel)
+            if (dist < 120) {
+                const textAlpha = Math.min(1, (120 - dist) / 40) * a;
+
                 // Text outline for readability
-                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.7})`;
-                this.ctx.lineWidth = 3;
-                this.ctx.font = 'bold 14px Outfit';
+                this.ctx.strokeStyle = `rgba(0,0,0,${textAlpha * 0.7})`;
+                this.ctx.lineWidth = 2.5;
+                this.ctx.font = '500 14px Inter, sans-serif';
                 this.ctx.textAlign = 'center';
-                this.ctx.strokeText(e.text, e.x, e.y - rad - 18);
-                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.95})`;
-                this.ctx.fillText(e.text, e.x, e.y - rad - 18);
+                this.ctx.strokeText(e.text, e.x, e.y - rad - 20);
+                this.ctx.fillStyle = `rgba(255,255,255,${textAlpha})`;
+                this.ctx.fillText(e.text, e.x, e.y - rad - 20);
 
-                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
+                this.ctx.strokeStyle = `rgba(0,0,0,${textAlpha * 0.5})`;
                 this.ctx.lineWidth = 2;
-                this.ctx.font = '10px Outfit';
-                this.ctx.strokeText(`— ${e.name}`, e.x, e.y - rad - 34);
-                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.65})`;
-                this.ctx.fillText(`— ${e.name}`, e.x, e.y - rad - 34);
+                this.ctx.font = '11px Inter, sans-serif';
+                this.ctx.strokeText(`— ${e.name} ${ignited > 0 ? `(Ignited x${ignited})` : ''}`, e.x, e.y - rad - 38);
+                this.ctx.fillStyle = `rgba(200,220,255,${textAlpha * 0.75})`;
+                this.ctx.fillText(`— ${e.name} ${ignited > 0 ? `(Ignited x${ignited})` : ''}`, e.x, e.y - rad - 38);
             }
         }
     }
@@ -184,8 +200,8 @@ export class Renderer {
             const cx = (a.x + b.x + c.x) / 3;
             const cy = (a.y + b.y + c.y) / 3;
             const g = this.ctx.createRadialGradient(cx, cy, 0, cx, cy, 170);
-            g.addColorStop(0, 'rgba(232,197,71,0.06)');
-            g.addColorStop(1, 'rgba(232,197,71,0)');
+            g.addColorStop(0, 'rgba(125,211,252,0.05)');
+            g.addColorStop(1, 'rgba(125,211,252,0)');
             this.ctx.fillStyle = g;
             this.ctx.beginPath();
             this.ctx.moveTo(a.x, a.y);
@@ -193,8 +209,8 @@ export class Renderer {
             this.ctx.lineTo(c.x, c.y);
             this.ctx.closePath();
             this.ctx.fill();
-            this.ctx.strokeStyle = 'rgba(232,197,71,0.28)';
-            this.ctx.lineWidth = 1.5;
+            this.ctx.strokeStyle = 'rgba(125,211,252,0.22)';
+            this.ctx.lineWidth = 1;
             this.ctx.stroke();
         }
         this.ctx.globalCompositeOperation = 'source-over';
@@ -316,12 +332,12 @@ export class Renderer {
             // Name with outline - different styling for bots
             if (isBot) {
                 // Bot name styling - slightly transparent, different color
-                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
+                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.45})`;
                 this.ctx.lineWidth = 2;
-                this.ctx.font = '10px Outfit';
+                this.ctx.font = '10px Inter, sans-serif';
                 this.ctx.textAlign = 'center';
                 this.ctx.strokeText(o.name, o.x, o.y - o.r - 12);
-                this.ctx.fillStyle = `rgba(150,180,255,${a * 0.75})`;
+                this.ctx.fillStyle = `rgba(125,211,252,${a * 0.7})`;
                 this.ctx.fillText(o.name, o.x, o.y - o.r - 12);
 
                 // Bot message bubble (when bot is speaking a thought)
@@ -354,6 +370,7 @@ export class Renderer {
                     this.ctx.stroke();
 
                     // Draw message text
+                    this.ctx.font = '12px Inter, sans-serif';
                     this.ctx.fillStyle = `rgba(255, 255, 255, ${msgAlpha * 0.95})`;
                     this.ctx.textAlign = 'center';
                     this.ctx.textBaseline = 'middle';
@@ -362,12 +379,12 @@ export class Renderer {
                 }
             } else {
                 // Real player name styling
-                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.6})`;
-                this.ctx.lineWidth = 2.5;
-                this.ctx.font = 'bold 11px Outfit';
+                this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.55})`;
+                this.ctx.lineWidth = 2;
+                this.ctx.font = '500 11px Inter, sans-serif';
                 this.ctx.textAlign = 'center';
                 this.ctx.strokeText(o.name, o.x, o.y - o.r - 14);
-                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.9})`;
+                this.ctx.fillStyle = `rgba(255,255,255,${a * 0.92})`;
                 this.ctx.fillText(o.name, o.x, o.y - o.r - 14);
             }
         });
@@ -415,12 +432,12 @@ export class Renderer {
             this.ctx.fill();
 
             // Name (slightly transparent to indicate it's a bot)
-            this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.5})`;
+            this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.45})`;
             this.ctx.lineWidth = 2;
-            this.ctx.font = '10px Outfit';
+            this.ctx.font = '10px Inter, sans-serif';
             this.ctx.textAlign = 'center';
             this.ctx.strokeText(bot.name, bot.x, bot.y - botR - 12);
-            this.ctx.fillStyle = `rgba(150,180,255,${a * 0.75})`;
+            this.ctx.fillStyle = `rgba(125,211,252,${a * 0.7})`;
             this.ctx.fillText(bot.name, bot.x, bot.y - botR - 12);
         });
     }
@@ -455,9 +472,9 @@ export class Renderer {
             this.ctx.globalCompositeOperation = 'source-over';
 
             // Text with outline for readability
-            this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.8})`;
-            this.ctx.lineWidth = 3;
-            this.ctx.font = 'bold 15px Outfit';
+            this.ctx.strokeStyle = `rgba(0,0,0,${a * 0.7})`;
+            this.ctx.lineWidth = 2.5;
+            this.ctx.font = '600 14px Inter, sans-serif';
             this.ctx.textAlign = 'center';
             this.ctx.strokeText(p.text, p.x, p.y + 5);
             this.ctx.fillStyle = `rgba(255,255,255,${a})`;
@@ -563,13 +580,13 @@ export class Renderer {
     renderFloats(floats: { x: number; y: number; text: string; hue: number; size: number; life: number }[]): void {
         for (const f of floats) {
             // Text outline
-            this.ctx.strokeStyle = `rgba(0,0,0,${f.life * 0.7})`;
-            this.ctx.lineWidth = 3;
-            this.ctx.font = `bold ${f.size}px Outfit`;
+            this.ctx.strokeStyle = `rgba(0,0,0,${f.life * 0.6})`;
+            this.ctx.lineWidth = 2.5;
+            this.ctx.font = `600 ${f.size}px Inter, sans-serif`;
             this.ctx.textAlign = 'center';
             this.ctx.strokeText(f.text, f.x, f.y);
             // Fill text
-            this.ctx.fillStyle = `hsla(${f.hue},68%,68%,${f.life})`;
+            this.ctx.fillStyle = `hsla(${f.hue},65%,72%,${f.life})`;
             this.ctx.fillText(f.text, f.x, f.y);
         }
     }
@@ -645,7 +662,7 @@ export class Renderer {
         this.mmCtx.fill();
 
         // Render view radius
-        this.mmCtx.strokeStyle = 'rgba(232,197,71,0.18)';
+        this.mmCtx.strokeStyle = 'rgba(125,211,252,0.15)';
         this.mmCtx.lineWidth = 1;
         this.mmCtx.beginPath();
         this.mmCtx.arc(cx, cy, viewRadius * sc, 0, Math.PI * 2);
@@ -702,7 +719,7 @@ export class Renderer {
             this.ctx.rotate(angle);
 
             // Arrow pointing to center
-            this.ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.8})`;
+            this.ctx.fillStyle = `rgba(125, 211, 252, ${opacity * 0.75})`;
             this.ctx.beginPath();
             this.ctx.moveTo(12, 0);
             this.ctx.lineTo(-8, 6);
@@ -713,16 +730,16 @@ export class Renderer {
             this.ctx.restore();
 
             // Distance text with outline
-            this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.8})`;
+            this.ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.7})`;
             this.ctx.lineWidth = 2;
-            this.ctx.font = 'bold 10px "Space Mono", monospace';
+            this.ctx.font = '500 10px "JetBrains Mono", monospace';
             this.ctx.textAlign = 'center';
             this.ctx.strokeText(
                 `${Math.round(distToCenter)} to Campfire`,
                 arrowX,
                 arrowY + 22
             );
-            this.ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.9})`;
+            this.ctx.fillStyle = `rgba(125, 211, 252, ${opacity * 0.85})`;
             this.ctx.fillText(
                 `${Math.round(distToCenter)} to Campfire`,
                 arrowX,

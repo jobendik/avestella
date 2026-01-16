@@ -17,8 +17,8 @@ export class VoiceChat {
     vadThreshold: number = 0.02;
     userId: string = '';
     signalSender: SignalSender | null = null;
-    
-    constructor(private settings: Settings) {}
+
+    constructor(private settings: Settings) { }
 
     setUserId(id: string): void {
         this.userId = id;
@@ -28,32 +28,51 @@ export class VoiceChat {
         this.signalSender = sender;
     }
 
+    canSpeak: boolean = false;
+    onConnectionStateChange: ((peerId: string, state: 'connected' | 'disconnected' | 'failed') => void) | null = null;
+
     async init(): Promise<boolean> {
         try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            });
-
+            // enhancing the audio context with user interaction
             this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const source = this.audioContext.createMediaStreamSource(this.localStream);
-            this.analyser = this.audioContext.createAnalyser();
-            this.analyser.fftSize = 256;
-            source.connect(this.analyser);
 
-            // Enable/disable audio based on PTT setting
-            this.localStream.getAudioTracks().forEach(track => {
-                track.enabled = !(this.settings as any).ptt;
-            });
+            try {
+                this.localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                const source = this.audioContext.createMediaStreamSource(this.localStream);
+                this.analyser = this.audioContext.createAnalyser();
+                this.analyser.fftSize = 256;
+                source.connect(this.analyser);
+
+                // Enable/disable audio based on PTT setting
+                this.localStream.getAudioTracks().forEach(track => {
+                    track.enabled = !(this.settings as any).ptt;
+                });
+
+                this.canSpeak = true;
+                this.startVAD();
+            } catch (err) {
+                console.warn('Microphone access denied or unavailable - starting in Listen Only mode', err);
+                this.canSpeak = false;
+                this.localStream = null;
+            }
 
             this.enabled = true;
-            this.startVAD();
+
+            // Ensure context is running (mobile often needs this resumed)
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+            }
+
             return true;
         } catch (e) {
-            console.error('Voice init failed:', e);
+            console.error('Voice system init failed completely:', e);
             return false;
         }
     }
@@ -87,11 +106,23 @@ export class VoiceChat {
         check();
     }
 
+    isMuted: boolean = false;
+
+    setMuted(muted: boolean): void {
+        this.isMuted = muted;
+        if (this.localStream) {
+            this.localStream.getAudioTracks().forEach(track => {
+                track.enabled = !muted && !((this.settings as any).ptt && !this.isPTTActive);
+            });
+        }
+    }
+
     setPTT(active: boolean): void {
         this.isPTTActive = active;
         if (this.localStream) {
             this.localStream.getAudioTracks().forEach(track => {
-                track.enabled = active;
+                // Audio enabled only if: NOT muted AND (NOT PTT mode OR PTT is active)
+                track.enabled = !this.isMuted && (!((this.settings as any).ptt) || active);
             });
         }
     }
@@ -105,6 +136,9 @@ export class VoiceChat {
 
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
+        } else {
+            // If we have no mic, we must explicitly add a transceiver to tell the other side we want to receive audio
+            pc.addTransceiver('audio', { direction: 'recvonly' });
         }
 
         pc.ontrack = (event) => {
@@ -114,11 +148,16 @@ export class VoiceChat {
                 existingAudio.srcObject = null;
                 existingAudio.remove();
             }
-            
+
             const audio = document.createElement('audio');
             audio.srcObject = event.streams[0];
             audio.autoplay = true;
+            audio.muted = true; // Mute hidden element, let AudioContext handle output
+            (audio as any).playsInline = true; // iOS requirement
             this.audioElements.set(peerId, audio); // Track for cleanup
+
+            // Keep the audio graph alive
+            audio.play().catch(e => console.warn('Audio play failed:', e));
 
             if (this.audioContext) {
                 const source = this.audioContext.createMediaStreamSource(event.streams[0]);
@@ -127,6 +166,15 @@ export class VoiceChat {
                 source.connect(gain);
                 gain.connect(this.audioContext.destination);
                 this.gains.set(peerId, gain);
+            }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            console.log(`🧊 ICE State (${peerId}): ${pc.iceConnectionState}`);
+            if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+                this.onConnectionStateChange?.(peerId, 'disconnected');
+            } else if (pc.iceConnectionState === 'connected') {
+                this.onConnectionStateChange?.(peerId, 'connected');
             }
         };
 
@@ -162,6 +210,8 @@ export class VoiceChat {
 
                 if (this.localStream) {
                     this.localStream.getTracks().forEach(track => pc!.addTrack(track, this.localStream!));
+                } else {
+                    pc!.addTransceiver('audio', { direction: 'recvonly' });
                 }
 
                 pc.ontrack = (event) => {
@@ -171,11 +221,15 @@ export class VoiceChat {
                         existingAudio.srcObject = null;
                         existingAudio.remove();
                     }
-                    
+
                     const audio = document.createElement('audio');
                     audio.srcObject = event.streams[0];
                     audio.autoplay = true;
+                    audio.muted = true; // Mute hidden element, let AudioContext handle output
+                    (audio as any).playsInline = true; // iOS requirement
                     this.audioElements.set(from, audio); // Track for cleanup
+
+                    audio.play().catch(e => console.warn('Audio play failed:', e));
 
                     if (this.audioContext) {
                         const source = this.audioContext.createMediaStreamSource(event.streams[0]);
@@ -183,6 +237,18 @@ export class VoiceChat {
                         source.connect(gain);
                         gain.connect(this.audioContext.destination);
                         this.gains.set(from, gain);
+                    }
+                };
+
+                pc.oniceconnectionstatechange = () => {
+                    const peerConnection = this.peers.get(from);
+                    if (!peerConnection) return;
+
+                    console.log(`🧊 ICE State (${from}): ${peerConnection.iceConnectionState}`);
+                    if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected') {
+                        this.onConnectionStateChange?.(from, 'disconnected');
+                    } else if (peerConnection.iceConnectionState === 'connected') {
+                        this.onConnectionStateChange?.(from, 'connected');
                     }
                 };
 
@@ -236,7 +302,7 @@ export class VoiceChat {
             this.peers.delete(peerId);
         }
         this.gains.delete(peerId);
-        
+
         // Clean up audio element to prevent memory leak
         const audio = this.audioElements.get(peerId);
         if (audio) {
@@ -250,7 +316,7 @@ export class VoiceChat {
      * Update voice connections based on nearby players
      * Call this periodically with the list of nearby player IDs
      */
-    updateNearbyPeers(nearbyPlayerIds: Set<string>, voiceRange: number = 500): void {
+    updateNearbyPeers(nearbyPlayerIds: Set<string>): void {
         if (!this.enabled) return;
 
         // Connect to new nearby players
@@ -290,7 +356,7 @@ export class VoiceChat {
         this.peers.forEach(pc => pc.close());
         this.peers.clear();
         this.gains.clear();
-        
+
         // Clean up all audio elements to prevent memory leaks
         this.audioElements.forEach(audio => {
             audio.srcObject = null;

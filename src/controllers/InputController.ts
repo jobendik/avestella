@@ -21,7 +21,7 @@ export class InputController {
     private getGameActive: () => boolean;
     // @ts-ignore Reserved for future UI features
     private _getDimensions: () => { width: number; height: number };
-    
+
     private isMouseDown: boolean = false;
     private cleanupFns: (() => void)[] = [];
 
@@ -133,7 +133,7 @@ export class InputController {
         const player = this.getPlayer();
         player.tx = world.x;
         player.ty = world.y;
-        
+
         EventBus.emit('player:move', world);
     }
 
@@ -142,7 +142,7 @@ export class InputController {
      */
     private handleMouseMove(e: MouseEvent): void {
         if (!this.isMouseDown) return;
-        
+
         const world = this.screenToWorld(e.clientX, e.clientY);
         const player = this.getPlayer();
         player.tx = world.x;
@@ -162,12 +162,12 @@ export class InputController {
     private handleTouchStart(e: TouchEvent): void {
         e.preventDefault();
         if (!e.touches[0]) return;
-        
+
         const world = this.screenToWorld(e.touches[0].clientX, e.touches[0].clientY);
         const player = this.getPlayer();
         player.tx = world.x;
         player.ty = world.y;
-        
+
         EventBus.emit('player:move', world);
     }
 
@@ -177,7 +177,7 @@ export class InputController {
     private handleTouchMove(e: TouchEvent): void {
         e.preventDefault();
         if (!e.touches[0]) return;
-        
+
         const world = this.screenToWorld(e.touches[0].clientX, e.touches[0].clientY);
         const player = this.getPlayer();
         player.tx = world.x;
@@ -196,6 +196,16 @@ export class InputController {
      */
     private handleKeyDown(e: KeyboardEvent): void {
         if (!this.getGameActive()) return;
+
+        // Ignore key commands if user is typing in an input field
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+            if (e.key === 'Escape') {
+                // Let Escape through to close the box
+            } else {
+                return;
+            }
+        }
 
         switch (e.key.toLowerCase()) {
             case 'w':

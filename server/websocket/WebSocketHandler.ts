@@ -359,7 +359,7 @@ export class WebSocketHandler {
             const playerCooldowns = this.actionCooldowns.get(connection.playerId);
             const lastAction = playerCooldowns?.get(action) || 0;
             const remaining = Math.max(0, cooldownMs - (Date.now() - lastAction));
-            
+
             this.send(connection.ws, {
                 type: 'cooldown',
                 data: {
@@ -577,8 +577,8 @@ export class WebSocketHandler {
 
         // Increment stats
         if (mongoPersistence.isReady()) {
-            mongoPersistence.incrementPlayerStats(player1.playerId, { connections: 1 }).catch(() => {});
-            mongoPersistence.incrementPlayerStats(player2.playerId, { connections: 1 }).catch(() => {});
+            mongoPersistence.incrementPlayerStats(player1.playerId, { connections: 1 }).catch(() => { });
+            mongoPersistence.incrementPlayerStats(player2.playerId, { connections: 1 }).catch(() => { });
         }
 
         console.log(`🔗 Connection made: ${player1.name} <-> ${player2.name}`);
@@ -879,19 +879,19 @@ export class WebSocketHandler {
     private isRateLimited(playerId: string): boolean {
         const now = Date.now();
         let rateData = this.messageRateLimits.get(playerId);
-        
+
         if (!rateData || now - rateData.windowStart > this.MESSAGE_RATE_WINDOW) {
             // New window
             this.messageRateLimits.set(playerId, { count: 1, windowStart: now });
             return false;
         }
-        
+
         rateData.count++;
         if (rateData.count > this.MESSAGE_RATE_LIMIT) {
             console.warn(`⚠️ Rate limiting player ${playerId}: ${rateData.count} msgs in ${this.MESSAGE_RATE_WINDOW}ms`);
             return true;
         }
-        
+
         return false;
     }
 
@@ -931,6 +931,9 @@ export class WebSocketHandler {
                 case 'echo':
                     this.handleEcho(connection, message.data);
                     break;
+                case 'echo_ignite':
+                    this.handleEchoIgnite(connection, message.data);
+                    break;
                 case 'star_lit':
                     this.handleStarLit(connection, message.data);
                     break;
@@ -968,7 +971,7 @@ export class WebSocketHandler {
         if (typeof data.y === 'number') {
             connection.y = Math.max(-this.MAX_COORDINATE, Math.min(this.MAX_COORDINATE, data.y));
         }
-        
+
         // Validate and sanitize player name
         if (typeof data.name === 'string') {
             const sanitizedName = this.sanitizePlayerName(data.name);
@@ -976,7 +979,7 @@ export class WebSocketHandler {
                 connection.name = sanitizedName;
             }
         }
-        
+
         if (typeof data.hue === 'number') connection.hue = Math.max(0, Math.min(360, data.hue));
         // Note: XP is now server-authoritative, ignore client-sent XP
         // if (typeof data.xp === 'number') connection.xp = data.xp;
@@ -986,7 +989,7 @@ export class WebSocketHandler {
             // Validate realm
             const validRealms = ['genesis', 'nebula', 'void', 'starforge', 'sanctuary'];
             if (!validRealms.includes(data.realm)) return;
-            
+
             const oldRealm = connection.realm;
             connection.realm = data.realm;
 
@@ -1018,18 +1021,18 @@ export class WebSocketHandler {
     private sanitizePlayerName(name: string): string | null {
         // Trim and limit length
         let sanitized = name.trim().substring(0, SHARED_CONFIG.MAX_PLAYER_NAME);
-        
+
         // Remove potentially dangerous characters (HTML/script injection)
         sanitized = sanitized.replace(/[<>&"'`]/g, '');
-        
+
         // Remove control characters
         sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
-        
+
         // Must have at least 1 visible character
         if (sanitized.length === 0) {
             return null;
         }
-        
+
         return sanitized;
     }
 
@@ -1044,7 +1047,7 @@ export class WebSocketHandler {
         // Track whispers sent stat
         // Note: We don't have whispersSent in PlayerConnection, update in DB directly
         if (mongoPersistence.isReady()) {
-            mongoPersistence.incrementPlayerStats(connection.playerId, { whispersSent: 1 }).catch(() => {});
+            mongoPersistence.incrementPlayerStats(connection.playerId, { whispersSent: 1 }).catch(() => { });
         }
 
         // Award XP for sending whisper (server-authoritative)
@@ -1231,7 +1234,41 @@ export class WebSocketHandler {
                 ...data,
                 text,
                 playerId: connection.playerId,
-                echoId
+                echoId,
+                ignited: 0
+            },
+            timestamp: Date.now()
+        });
+    }
+
+    /**
+     * Handle echo ignite (like) event
+     */
+    private handleEchoIgnite(connection: PlayerConnection, data: any): void {
+        const echoId = data.echoId;
+        if (!echoId) return;
+
+        const echo = this.echoes.get(echoId);
+        if (!echo) return;
+
+        // Prevent self-ignite or spam (simple check)
+        // ideally we track who ignited what, but for now just global count
+
+        // Update in-memory
+        echo.ignited = (echo.ignited || 0) + 1;
+
+        // Persist update (async)
+        if (mongoPersistence.isReady()) {
+            mongoPersistence.igniteEcho(echoId).catch(console.error);
+        }
+
+        // Broadcast update to all in realm
+        this.broadcastToRealmAll(echo.realm, {
+            type: 'echo_ignited',
+            data: {
+                echoId,
+                ignited: echo.ignited,
+                ignitedBy: connection.playerId
             },
             timestamp: Date.now()
         });

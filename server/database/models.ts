@@ -15,6 +15,7 @@ export interface IEcho extends Document {
     authorName: string;      // Author's display name
     realm: string;           // Which realm (genesis, nebula, void, etc.)
     votes: number;           // Upvotes for persistence
+    ignited: number;         // Visual "likes" (glow intensity)
     createdAt: Date;
     updatedAt: Date;
 }
@@ -65,6 +66,10 @@ const EchoSchema = new Schema<IEcho>({
     votes: {
         type: Number,
         default: 0
+    },
+    ignited: {
+        type: Number,
+        default: 0
     }
 }, {
     timestamps: true,
@@ -78,7 +83,7 @@ EchoSchema.index({ realm: 1, x: 1, y: 1 });
 // Echoes with positive votes persist longer
 EchoSchema.index(
     { createdAt: 1 },
-    { 
+    {
         expireAfterSeconds: 30 * 24 * 60 * 60, // 30 days
         partialFilterExpression: { votes: { $lte: 0 } }
     }

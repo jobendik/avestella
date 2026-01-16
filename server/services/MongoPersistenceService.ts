@@ -118,7 +118,8 @@ export class MongoPersistenceService {
             authorId: data.authorId || 'anonymous',
             authorName: data.name,
             realm: data.realm,
-            votes: data.votes || 0
+            votes: data.votes || 0,
+            ignited: 0
         });
 
         await echo.save();
@@ -203,6 +204,18 @@ export class MongoPersistenceService {
     async deleteEcho(echoId: string): Promise<boolean> {
         const result = await Echo.deleteOne({ echoId });
         return result.deletedCount > 0;
+    }
+
+    /**
+     * Increment echo ignited count
+     */
+    async igniteEcho(echoId: string): Promise<number> {
+        const result = await Echo.findOneAndUpdate(
+            { echoId },
+            { $inc: { ignited: 1 } },
+            { new: true }
+        );
+        return result?.ignited || 0;
     }
 
     /**

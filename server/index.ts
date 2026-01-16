@@ -53,9 +53,19 @@ const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
         // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin) return callback(null, true);
+
+        // Check allowed exact origins
         if (allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
+
+        // Allow local network IPs (IPv4)
+        // Matches 192.168.x.x, 10.x.x.x, 172.16-31.x.x
+        const localIpRegex = /^(http|https):\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/;
+        if (localIpRegex.test(origin)) {
+            return callback(null, true);
+        }
+
         // Unknown origins: don't set CORS headers (browser blocks), but no 500 error
         return callback(null, false);
     },

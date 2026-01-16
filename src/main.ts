@@ -39,7 +39,7 @@ const gameState: GameState = {
 };
 
 // Track when we received initial player data vs XP gains (for race condition fix)
-let playerDataLoadedAt = 0;
+// let playerDataLoadedAt = 0;
 let lastXpGainAt = 0;
 
 // Voice peer discovery - update every 500ms (30 frames at 60fps)
@@ -462,6 +462,33 @@ function setupUI(): void {
         const mx = (e.clientX - rect.left - W / 2) + camera.x;
         const my = (e.clientY - rect.top - H / 2) + camera.y;
 
+        // Check echoes (Ignite interaction)
+        for (const echo of echoes) {
+            if (echo.realm !== gameState.currentRealm) continue;
+            const dist = Math.hypot(echo.x - mx, echo.y - my);
+            if (dist < 45) { // Click radius
+                // Ignite the echo
+                wsClient.igniteEcho(echo.id);
+
+                // Immediate visual/audio feedback
+                echo.pulse = 1.0;
+                audio.playStarIgnite(echo.ignited || 1);
+
+                // Create particle burst
+                for (let i = 0; i < 8; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    particles.push(new Particle(
+                        echo.x,
+                        echo.y,
+                        Math.cos(angle) * 2,
+                        Math.sin(angle) * 2,
+                        echo.hue
+                    ));
+                }
+                return;
+            }
+        }
+
         let clicked: string | null = null;
 
         // Check all entities (players and bots) - bots are now in 'others' map with isBot=true
@@ -550,6 +577,16 @@ function handleMouseUp(): void {
 
 function handleKeyDown(e: KeyboardEvent): void {
     if (!gameState.gameActive) return;
+
+    // Ignore key commands if user is typing in an input field
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        if (e.key === 'Escape') {
+            // Let Escape through to close the box
+        } else {
+            return;
+        }
+    }
 
     switch (e.key.toLowerCase()) {
         case 'w':
@@ -899,11 +936,11 @@ function applyEmoteEffect(playerId: string, emoji: string, x: number, y: number)
     floats.push(new FloatingText(x, y - halo - 35, emoji, 80, 22));
 }
 
-function applyEchoEffect(playerId: string, text: string, x: number, y: number, hue: number, playerName: string): void {
+function applyEchoEffect(playerId: string, text: string, x: number, y: number, hue: number, playerName: string, echoId: string, ignited: number = 0): void {
     const isSelf = playerId === player.id;
 
     // Create echo for everyone
-    const echo = new Echo(x, y, text, hue, playerName, playerId);
+    const echo = new Echo(echoId, x, y, text, hue, playerName, gameState.currentRealm, playerId, ignited);
     echoes.push(echo);
 
     if (isSelf) {
@@ -1045,7 +1082,17 @@ function setupNetworkEventListeners(): void {
 
     EventBus.on('network:echo', (data) => {
         console.log(`📢 Server broadcast: ${data.playerName} created echo`);
-        applyEchoEffect(data.playerId, data.text, data.x, data.y, data.hue, data.playerName);
+        applyEchoEffect(data.playerId, data.text, data.x, data.y, data.hue, data.playerName, data.echoId, data.ignited);
+    });
+
+    EventBus.on('network:echoIgnited', (data) => {
+        const echo = echoes.find(e => e.id === data.echoId);
+        if (echo) {
+            echo.ignited = data.ignited;
+            echo.pulse = 1.0; // Visual pulse
+            // Play ignition sound
+            audio.playStarIgnite(echo.ignited);
+        }
     });
 
     EventBus.on('network:whisper', (data) => {
@@ -1180,7 +1227,7 @@ function setupNetworkEventListeners(): void {
                     (Math.abs(local.x - e.x) < 5 && Math.abs(local.y - e.y) < 5)
                 );
                 if (!exists && echoes.length < 100) {
-                    echoes.push(new Echo(e.x, e.y, e.text, e.hue || 200, e.name || 'Unknown', e.realm || gameState.currentRealm));
+                    echoes.push(new Echo(e.id, e.x, e.y, e.text, e.hue || 200, e.name || 'Unknown', e.realm || gameState.currentRealm, e.authorId || '', e.ignited || 0));
                 }
             }
         }
@@ -1204,11 +1251,11 @@ function setupNetworkEventListeners(): void {
     EventBus.on('network:playerData', (data) => {
         const now = Date.now();
         console.log(`📂 Loaded player data from server: ${data.name} (Level ${data.level})`);
-        
+
         // Sync player state with server
         player.name = data.name;
         player.hue = data.hue;
-        
+
         // Only update XP if we haven't received any xpGain messages yet
         // This prevents race conditions where playerData arrives after xpGain
         if (lastXpGainAt === 0 || now < lastXpGainAt) {
@@ -1219,18 +1266,18 @@ function setupNetworkEventListeners(): void {
             stats.stars = data.stars;
             stats.echoes = data.echoes;
         }
-        
+
         // Always update action stats from server (these don't change during XP gain)
         stats.sings = data.sings || 0;
         stats.pulses = data.pulses || 0;
         stats.emotes = data.emotes || 0;
         stats.teleports = data.teleports || 0;
-        
+
         // Update visual size based on level
         const currentLevel = stats.level || data.level;
         player.r = 11 + currentLevel * 1.5;
         player.halo = 55 + currentLevel * 8;
-        
+
         // Restore position if available
         if (data.lastPosition && data.lastRealm === gameState.currentRealm) {
             player.x = data.lastPosition.x;
@@ -1239,26 +1286,26 @@ function setupNetworkEventListeners(): void {
             player.ty = data.lastPosition.y;
             console.log(`📍 Restored position: ${player.x.toFixed(0)}, ${player.y.toFixed(0)}`);
         }
-        
+
         // Sync friends from server
         friends.clear();
         for (const friend of data.friends) {
             friends.add(friend.id);
         }
-        
+
         // Sync achievements from server
         for (const achId of data.achievements) {
             unlocked.add(achId);
         }
-        
+
         // Update UI
         UIManager.updateHUD(player);
         UIManager.updateRealmLocks(player.xp);
-        
+
         // Check achievements with restored stats
         checkAchievements();
-        
-        playerDataLoadedAt = now;
+
+        // playerDataLoadedAt = now;
         console.log(`✅ Synced ${friends.size} friends and ${unlocked.size} achievements from server`);
     });
 
@@ -1267,19 +1314,19 @@ function setupNetworkEventListeners(): void {
     EventBus.on('network:xpGain', (data) => {
         const { amount, reason, newXp, newLevel, leveledUp } = data;
         lastXpGainAt = Date.now();
-        
+
         // Update local state with server-authoritative values
         const oldLevel = GameLogic.getLevel(player.xp);
         player.xp = newXp;
-        
+
         // Show XP gain floating text
         floats.push(new FloatingText(player.x, player.y - player.halo - 25, `+${amount} XP`, 50, 13));
-        
+
         // Update action stats based on reason
         if (reason === 'sing') stats.sings++;
         else if (reason === 'pulse') stats.pulses++;
         else if (reason === 'emote') stats.emotes++;
-        
+
         // Handle level up
         if (leveledUp && newLevel > oldLevel) {
             audio.playLevelUp();
@@ -1292,7 +1339,7 @@ function setupNetworkEventListeners(): void {
             UIManager.toast(`✨ Level ${newLevel}! You are now a ${GameLogic.getForm(newLevel)}`, 'level');
             UIManager.updateRealmLocks(player.xp);
         }
-        
+
         UIManager.updateHUD(player);
         checkAchievements();
         console.log(`⭐ XP gained: +${amount} (${reason}) - Total: ${newXp}`);
@@ -1326,16 +1373,16 @@ function setupNetworkEventListeners(): void {
         player.y = data.y;
         player.tx = data.x;
         player.ty = data.y;
-        
+
         stats.teleports++;
         UIManager.toast(`Teleported to ${data.friendName}! 🌀`);
         UIManager.hideProfile();
-        
+
         // Visual effect
         if (settings.particles) {
             GameLogic.spawnParticles(player.x, player.y, player.hue, 40, true, particles);
         }
-        
+
         checkAchievements();
     });
 
@@ -1452,20 +1499,20 @@ function update(): void {
         if (voiceChat.enabled) {
             const nearbyVoicePeers = new Set<string>();
             const VOICE_RANGE = 500; // Same as spatial audio range
-            
+
             for (const [id, other] of others.entries()) {
                 // Skip bots - they don't have voice
                 if (other.isBot) continue;
-                
+
                 const dist = Math.hypot(other.x - player.x, other.y - player.y);
                 if (dist <= VOICE_RANGE) {
                     nearbyVoicePeers.add(id);
                 }
             }
-            
+
             // Update voice connections and spatial audio
-            voiceChat.updateNearbyPeers(nearbyVoicePeers, VOICE_RANGE);
-            
+            voiceChat.updateNearbyPeers(nearbyVoicePeers);
+
             // Update spatial audio volumes for connected peers
             for (const id of voiceChat.getConnectedPeers()) {
                 const other = others.get(id);
@@ -1582,13 +1629,9 @@ console.log('✨ AURA TypeScript initialized');
  * Toggle voice chat on/off
  */
 async function toggleVoice(): Promise<void> {
-    if (voiceChat.enabled) {
-        voiceChat.disable();
-        gameState.voiceOn = false;
-        updateVoiceUI();
-        console.log('🔇 Voice disabled');
-    } else {
-        // Set up WebSocket-based signaling
+    // State 1: Disabled -> Enabled (Mic On)
+    if (!voiceChat.enabled) {
+        // Init logic...
         voiceChat.setUserId(player.id);
         voiceChat.setSignalSender((targetId, signalType, data) => {
             if (wsClient.isConnected()) {
@@ -1612,9 +1655,41 @@ async function toggleVoice(): Promise<void> {
                 updateVoiceViz(level);
             };
 
+            voiceChat.onConnectionStateChange = (peerId, state) => {
+                if (state === 'connected') {
+                    UIManager.toast(`🔗 Connected to peer`, 'success');
+                } else if (state === 'failed') {
+                    UIManager.toast(`❌ Connection failed`, 'error');
+                } else if (state === 'disconnected') {
+                    console.log(`🔌 Voice disconnected from ${peerId}`);
+                }
+            };
+
             updateVoiceUI();
-            console.log('🎙️ Voice enabled');
+
+            if (voiceChat.canSpeak) {
+                console.log('🎙️ Voice enabled');
+                UIManager.toast('🎙️ Voice Active', 'success');
+            } else {
+                UIManager.toast('🎧 Listen Only Mode', 'warning');
+                console.log('🎧 Voice enabled (Listen Only)');
+            }
         }
+    }
+    // State 2: Enabled (Mic On) -> Enabled (Muted)
+    else if (!voiceChat.isMuted && voiceChat.canSpeak) {
+        voiceChat.setMuted(true);
+        UIManager.toast('🔇 Microphone Muted', 'info');
+        updateVoiceUI();
+    }
+    // State 3: Enabled (Muted/Listen Only) -> Disabled
+    else {
+        voiceChat.disable();
+        gameState.voiceOn = false;
+        voiceChat.setMuted(false); // Reset state
+        updateVoiceUI();
+        UIManager.toast('🔌 Voice Disconnected', 'info');
+        console.log('🔇 Voice disabled');
     }
 }
 
@@ -1629,12 +1704,22 @@ function updateVoiceUI(): void {
     if (voiceChat.enabled) {
         btn?.classList.add('on');
         btn?.classList.remove('muted');
-        if (btn) btn.textContent = '🎙️';
-        if (status) status.textContent = voiceChat.isSpeaking ? 'Talk' : 'On';
-        if (voiceChat.isSpeaking) {
-            orb?.classList.add('speaking');
-        } else {
+
+        if (voiceChat.isMuted) {
+            if (btn) btn.textContent = '🎧'; // Muted -> Headphones (Listen Mode)
+            if (status) status.innerHTML = 'Muted<br><span style="font-size:0.7em;opacity:0.7">Click to disconnect</span>';
             orb?.classList.remove('speaking');
+        } else if (!voiceChat.canSpeak) {
+            if (btn) btn.textContent = '🎧'; // Forced Listen Only
+            if (status) status.innerHTML = 'Listen Only<br><span style="font-size:0.7em;opacity:0.7">Click to disconnect</span>';
+        } else {
+            if (btn) btn.textContent = '🎙️'; // Active Mic
+            if (status) status.innerHTML = 'Talk<br><span style="font-size:0.7em;opacity:0.7">Click to mute</span>';
+            if (voiceChat.isSpeaking) {
+                orb?.classList.add('speaking');
+            } else {
+                orb?.classList.remove('speaking');
+            }
         }
     } else {
         btn?.classList.remove('on');

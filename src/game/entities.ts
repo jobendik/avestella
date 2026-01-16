@@ -25,6 +25,7 @@ export class Star {
 }
 
 export class Echo {
+    id: string; // Added ID
     x: number;
     y: number;
     text: string;
@@ -33,8 +34,11 @@ export class Echo {
     r: number;
     pulse: number;
     realm: string;
+    ignited: number;
+    playerId: string;
 
-    constructor(x: number, y: number, text: string, hue: number, name: string = 'Unknown', realm: string = 'genesis') {
+    constructor(id: string, x: number, y: number, text: string, hue: number, name: string = 'Unknown', realm: string = 'genesis', playerId: string = '', ignited: number = 0) {
+        this.id = id;
         this.x = x;
         this.y = y;
         this.text = text;
@@ -43,6 +47,8 @@ export class Echo {
         this.r = 9;
         this.pulse = 0;
         this.realm = realm;
+        this.playerId = playerId;
+        this.ignited = ignited;
     }
 }
 
